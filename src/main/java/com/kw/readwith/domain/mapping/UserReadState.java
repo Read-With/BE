@@ -25,10 +25,13 @@ public class UserReadState extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(nullable = false)
     private Book book;
 
-    private Integer lastReadChapterIdx;   // nullable(false) X → 초기 생성 0 처리可
+    @Column(nullable = false)
+    private Integer lastReadChapterIdx;
+
+    @Column(nullable = false)
     private Integer lastReadEventIdx;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String cfi;                   // EPUB CFI
 
     @JdbcTypeCode(SqlTypes.JSON)
