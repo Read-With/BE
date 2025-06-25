@@ -14,6 +14,4 @@ public class ProgressResponseDTO {
 
     String  cfi;
 
-    Double  percent;
-
 }

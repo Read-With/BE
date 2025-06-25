@@ -16,5 +16,4 @@ public class SaveProgressRequestDTO {
 
     private String  cfi;            // epubcfi(...)  ← nullable
 
-    private Double percent;
 }

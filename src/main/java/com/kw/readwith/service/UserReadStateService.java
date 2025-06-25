@@ -52,7 +52,6 @@ public class UserReadStateService {
                     .lastReadChapterIdx(requestDTO.getChapterIdx())
                     .lastReadEventIdx(requestDTO.getEventIdx())
                     .cfi(requestDTO.getCfi() != null ? requestDTO.getCfi() : "")
-                    .percent(requestDTO.getPercent() != null ? requestDTO.getPercent() : 0.0)
                     .bookmarks("[]")
                     .highlights("[]")
                     .build();
@@ -65,7 +64,6 @@ public class UserReadStateService {
                     .lastReadChapterIdx(requestDTO.getChapterIdx())
                     .lastReadEventIdx(requestDTO.getEventIdx())
                     .cfi(requestDTO.getCfi() != null ? requestDTO.getCfi() : "")
-                    .percent(requestDTO.getPercent() != null ? requestDTO.getPercent() : userReadState.getPercent())
                     .bookmarks(userReadState.getBookmarks())
                     .highlights(userReadState.getHighlights())
                     .build();
@@ -145,7 +143,6 @@ public class UserReadStateService {
                 .chapterIdx(userReadState.getLastReadChapterIdx())
                 .eventIdx(userReadState.getLastReadEventIdx())
                 .cfi(userReadState.getCfi())
-                .percent(userReadState.getPercent()) // 저장된 percent 값 사용
                 .build();
     }
 } 
