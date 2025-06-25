@@ -34,6 +34,9 @@ public class UserReadState extends BaseEntity {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String cfi;                   // EPUB CFI
 
+    @Column(nullable = false)
+    private Double percent;               // 읽기 진행률 (0.0 ~ 100.0)
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "json")
     private String bookmarks;

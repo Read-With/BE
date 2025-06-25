@@ -52,6 +52,7 @@ public class UserReadStateService {
                     .lastReadChapterIdx(requestDTO.getChapterIdx())
                     .lastReadEventIdx(requestDTO.getEventIdx())
                     .cfi(requestDTO.getCfi() != null ? requestDTO.getCfi() : "")
+                    .percent(requestDTO.getPercent() != null ? requestDTO.getPercent() : 0.0)
                     .bookmarks("[]")
                     .highlights("[]")
                     .build();
@@ -64,6 +65,7 @@ public class UserReadStateService {
                     .lastReadChapterIdx(requestDTO.getChapterIdx())
                     .lastReadEventIdx(requestDTO.getEventIdx())
                     .cfi(requestDTO.getCfi() != null ? requestDTO.getCfi() : "")
+                    .percent(requestDTO.getPercent() != null ? requestDTO.getPercent() : userReadState.getPercent())
                     .bookmarks(userReadState.getBookmarks())
                     .highlights(userReadState.getHighlights())
                     .build();
@@ -143,15 +145,7 @@ public class UserReadStateService {
                 .chapterIdx(userReadState.getLastReadChapterIdx())
                 .eventIdx(userReadState.getLastReadEventIdx())
                 .cfi(userReadState.getCfi())
-                .percent(calculatePercent(userReadState.getLastReadChapterIdx(), userReadState.getLastReadEventIdx()))
+                .percent(userReadState.getPercent()) // 저장된 percent 값 사용
                 .build();
-    }
-
-    // 퍼센트 계산 메서드 (간단한 예시)
-    private Double calculatePercent(Integer chapterIdx, Integer eventIdx) {
-        // 실제로는 책의 총 챕터 수와 이벤트 수를 고려해야 함
-        // 여기서는 간단히 챕터 인덱스를 기준으로 계산
-        if (chapterIdx == null) return 0.0;
-        return Math.min((chapterIdx + 1) * 10.0, 100.0); // 예시 계산
     }
 } 
