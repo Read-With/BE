@@ -14,4 +14,6 @@ public class ProgressResponseDTO {
 
     String  cfi;
 
+    Long bookId;
+
 }

@@ -143,6 +143,7 @@ public class UserReadStateService {
                 .chapterIdx(userReadState.getLastReadChapterIdx())
                 .eventIdx(userReadState.getLastReadEventIdx())
                 .cfi(userReadState.getCfi())
+                .bookId(userReadState.getBook().getId())
                 .build();
     }
 } 
