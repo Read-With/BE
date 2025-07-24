@@ -35,6 +35,7 @@ dependencies {
 
 	// SWAGGER
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+	testImplementation 'com.h2database:h2'
 }
 
 tasks.named('test') {
