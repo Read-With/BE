@@ -3,6 +3,7 @@ package com.kw.readwith.domain;
 import com.kw.readwith.domain.common.BaseEntity;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.domain.mapping.UserReadState;
+import com.kw.readwith.domain.mapping.Favorite;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -46,4 +47,7 @@ public class User extends BaseEntity {
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<UserReadState> readStates = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<Favorite> favorites = new ArrayList<>();
 }

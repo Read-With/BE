@@ -3,6 +3,7 @@ package com.kw.readwith.domain;
 import com.kw.readwith.domain.common.BaseEntity;
 import com.kw.readwith.domain.mapping.ChapterRelationshipEdge;
 import com.kw.readwith.domain.mapping.UserReadState;
+import com.kw.readwith.domain.mapping.Favorite;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -52,4 +53,7 @@ public class Book extends BaseEntity {
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
     private List<UserReadState> readStates = new ArrayList<>();
+
+    @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    private List<Favorite> favorites = new ArrayList<>();
 }
