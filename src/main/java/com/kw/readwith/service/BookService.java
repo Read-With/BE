@@ -7,6 +7,9 @@ import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.FavoriteRepository;
+import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.domain.User;
+import com.kw.readwith.aws.s3.AmazonS3Manager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +26,8 @@ public class BookService {
 
     private final BookRepository bookRepository;
     private final FavoriteRepository favoriteRepository;
+    private final UserRepository userRepository;
+    private final AmazonS3Manager amazonS3Manager;
 
     /**
      * 도서 목록 조회 (검색/필터/정렬/즐겨찾기)
@@ -32,7 +37,9 @@ public class BookService {
                                          Boolean favoriteOnly,
                                          String sortBy,
                                          Long userId) {
-        List<Book> books = bookRepository.findAll();
+        List<Book> books = bookRepository.findAll().stream()
+                .filter(b -> b.isInfoUploaded() || b.isDefault())
+                .collect(Collectors.toList());
 
         // 검색
         if (keyword != null && !keyword.isBlank()) {
@@ -92,6 +99,7 @@ public class BookService {
      */
     public BookDetailDTO getBook(Long bookId, Long userId) {
         Book book = bookRepository.findById(bookId)
+                .filter(b -> b.isInfoUploaded() || b.isDefault())
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         boolean isFavorite = false;
@@ -104,16 +112,21 @@ public class BookService {
 
     /**
      * 도서 업로드 (EPUB 파일 S3 업로드 후 Book 레코드 저장)
-     * 실제 S3 업로드 로직은 구현되어 있지 않고, 파일명을 그대로 epubPath 로 저장합니다.
      */
     @Transactional
-    public BookDetailDTO uploadBook(Long uploaderUserId,
+    public BookDetailDTO uploadBook(Long userId,
                                     MultipartFile epubFile,
                                     String title,
                                     String author,
                                     String language) {
-        // TODO: S3 업로드 구현. 현재는 파일명만 저장.
-        String epubPath = epubFile != null ? epubFile.getOriginalFilename() : null;
+        if(epubFile == null || epubFile.isEmpty()){
+            throw new GeneralException(ErrorStatus._BAD_REQUEST);
+        }
+        // 업로더 유저 조회
+        User uploader = userRepository.findById(userId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
+        // S3 original 폴더에 EPUB 업로드
+        String epubUrl = amazonS3Manager.uploadOriginal(title, epubFile);
 
         Book book = Book.builder()
                 .title(title)
@@ -121,8 +134,9 @@ public class BookService {
                 .language(language)
                 .isDefault(false)
                 .coverImgUrl(null)
-                .epubPath(epubPath)
-                .uploadedBy(null) // TODO: uploaderUserId 로 사용자 매핑
+                .epubPath(epubUrl)
+                .infoUploaded(false)
+                .uploadedBy(uploader)
                 .build();
 
         Book saved = bookRepository.save(book);

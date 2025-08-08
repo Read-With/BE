@@ -37,6 +37,7 @@ public class DataLoader implements CommandLineRunner {
         // 기본 제공 책들 생성 (모든 사용자가 접근 가능)
         Book book1 = Book.builder()
                 .title("해리포터와 마법사의 돌")
+                .infoUploaded(true)
                 .author("J.K. 롤링")
                 .language("ko")
                 .isDefault(true)
@@ -46,6 +47,7 @@ public class DataLoader implements CommandLineRunner {
 
         Book book2 = Book.builder()
                 .title("반지의 제왕")
+                .infoUploaded(true)
                 .author("J.R.R. 톨킨")
                 .language("ko")
                 .isDefault(true)
@@ -56,6 +58,7 @@ public class DataLoader implements CommandLineRunner {
         // 사용자별 책 생성 (해당 사용자만 접근 가능)
         Book book3 = Book.builder()
                 .title("개인 도서관 - 1984")
+                .infoUploaded(false)
                 .author("조지 오웰")
                 .language("ko")
                 .isDefault(false)
@@ -65,6 +68,7 @@ public class DataLoader implements CommandLineRunner {
 
         Book book4 = Book.builder()
                 .title("개인 도서관 - 동물농장")
+                .infoUploaded(false)
                 .author("조지 오웰")
                 .language("ko")
                 .isDefault(false)
