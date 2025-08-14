@@ -25,8 +25,8 @@ public class Book extends BaseEntity {
     @Column(length = 120, nullable = false)
     private String author;
 
-    @Column(length = 2, nullable = false)
-    private String language;   // ISO-639-1
+    @Column(length = 10, nullable = false)
+    private String language;   // ISO-639 code (e.g., "ko", "en", "en-US")
 
     @Column(nullable = false)
     private boolean isDefault;
@@ -42,6 +42,11 @@ public class Book extends BaseEntity {
 
     @Column(name = "epub_path", length = 255)
     private String epubPath;
+
+    // 분석 정보(관계정보·통계 등)가 업로드되었는지 여부
+    @Column(name = "info_uploaded", nullable = false)
+    @Builder.Default
+    private boolean infoUploaded = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_user_id")

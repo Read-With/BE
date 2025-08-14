@@ -4,21 +4,19 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.aws.s3.AmazonS3Manager;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
+import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
-import com.kw.readwith.repository.BookRepository;
-import com.kw.readwith.repository.ChapterRepository;
-import com.kw.readwith.repository.CharacterPovSummaryRepository;
-import com.kw.readwith.repository.CharacterRepository;
-import com.kw.readwith.repository.FavoriteRepository;
+import com.kw.readwith.repository.*;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,15 +33,30 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class BookService {
 
+    // 의존성 통합
     private final BookRepository bookRepository;
     private final FavoriteRepository favoriteRepository;
     private final ChapterRepository chapterRepository;
     private final CharacterRepository characterRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
+    private final UserRepository userRepository;
+    private final AmazonS3Manager amazonS3Manager;
     private final ObjectMapper objectMapper;
 
-    public List<BookSummaryDTO> getBooks(String keyword, String language, Boolean favoriteOnly, String sortBy, Long userId) {
-        List<Book> books = bookRepository.findAll();
+    /**
+     * 도서 목록 조회
+     */
+    public List<BookSummaryDTO> getBooks(String keyword,
+                                         String language,
+                                         Boolean favoriteOnly,
+                                         String sortBy,
+                                         Long userId) {
+        // 필터링 로직 유지
+        List<Book> books = bookRepository.findAll().stream()
+                .filter(b -> b.isInfoUploaded() || b.isDefault())
+                .collect(Collectors.toList());
+
+        // 검색
         if (keyword != null && !keyword.isBlank()) {
             String lower = keyword.toLowerCase();
             books = books.stream().filter(b -> b.getTitle().toLowerCase().contains(lower) || b.getAuthor().toLowerCase().contains(lower)).collect(Collectors.toList());
@@ -69,8 +82,15 @@ public class BookService {
         return books.stream().map(book -> BookSummaryDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).coverImgUrl(book.getCoverImgUrl()).isDefault(book.isDefault()).isFavorite(favoriteBookIds.contains(book.getId())).updatedAt(book.getUpdatedAt()).build()).collect(Collectors.toList());
     }
 
+    /**
+     * 도서 상세 조회
+     */
     public BookDetailDTO getBook(Long bookId, Long userId) {
-        Book book = bookRepository.findById(bookId).orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        // 팀원의 필터링 로직 유지
+        Book book = bookRepository.findById(bookId)
+                .filter(b -> b.isInfoUploaded() || b.isDefault())
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
         boolean isFavorite = false;
         if (userId != null) {
             isFavorite = favoriteRepository.findByUserId(userId).stream().anyMatch(fav -> fav.getBook().getId().equals(bookId));
@@ -78,10 +98,35 @@ public class BookService {
         return convertToDetailDTO(book, isFavorite);
     }
 
+    /**
+     * 도서 업로드
+     */
     @Transactional
-    public BookDetailDTO uploadBook(MultipartFile epubFile, String title, String author, String language) {
-        String epubPath = epubFile != null ? epubFile.getOriginalFilename() : null;
-        Book book = Book.builder().title(title).author(author).language(language).isDefault(false).coverImgUrl(null).epubPath(epubPath).uploadedBy(null).build();
+    public BookDetailDTO uploadBook(Long userId,
+                                    MultipartFile epubFile,
+                                    String title,
+                                    String author,
+                                    String language) {
+        if(epubFile == null || epubFile.isEmpty()){
+            throw new GeneralException(ErrorStatus._BAD_REQUEST);
+        }
+        // 업로더 유저 조회
+        User uploader = userRepository.findById(userId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
+        // S3 original 폴더에 EPUB 업로드
+        String epubUrl = amazonS3Manager.uploadOriginal(title, epubFile);
+
+        Book book = Book.builder()
+                .title(title)
+                .author(author)
+                .language(language)
+                .isDefault(false)
+                .coverImgUrl(null)
+                .epubPath(epubUrl)
+                .infoUploaded(false)
+                .uploadedBy(uploader)
+                .build();
+
         Book saved = bookRepository.save(book);
         return convertToDetailDTO(saved, false);
     }

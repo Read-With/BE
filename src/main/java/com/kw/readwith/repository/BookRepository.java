@@ -10,8 +10,14 @@ import java.util.List;
 public interface BookRepository extends JpaRepository<Book, Long> {
 
     /**
-     * summary 필드가 false인 모든 Book 엔티티를 조회합니다.
+     * summary 필드가 false인 모든 Book 엔터티를 조회합니다.
      * @return 요약이 없는 책 목록
      */
     List<Book> findBySummaryIsFalse();
-} 
+
+    /**
+     * infoUploaded 필드가 true인 모든 Book 엔터티를 조회합니다.
+     * @return 정보가 업로드된 책 목록
+     */
+    List<Book> findByInfoUploadedTrue();
+}

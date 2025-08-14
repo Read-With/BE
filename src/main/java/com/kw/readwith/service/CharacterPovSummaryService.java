@@ -34,7 +34,7 @@ public class CharacterPovSummaryService {
         Character character = characterRepository.findById(characterId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND));
 
-        // [수정됨] .book(chapter.getBook()) 코드가 추가되었습니다.
+        // .book(chapter.getBook()) 코드 추가.
         CharacterPovSummary newSummary = CharacterPovSummary.builder()
                 .book(chapter.getBook())
                 .chapter(chapter)

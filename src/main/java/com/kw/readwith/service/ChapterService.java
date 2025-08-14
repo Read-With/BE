@@ -24,6 +24,6 @@ public class ChapterService {
         Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, idx)
                 .orElseThrow(() -> new IllegalArgumentException("Chapter not found"));
         chapter.setSummaryText(summary);
-        // 변경 감지에 의해 트랜잭션이 커밋될 때 업데이트됩니다.
+        // 변경 감지에 의해 트랜잭션이 커밋될 때 업데이트.
     }
 }
