@@ -34,7 +34,15 @@ public enum ErrorStatus implements BaseErrorCode {
     BOOK_NOT_FOUND(HttpStatus.NOT_FOUND, "PROGRESS4001", "해당 책을 찾을 수 없습니다."),
     PROGRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "PROGRESS4002", "해당 진도를 찾을 수 없습니다."),
     BOOK_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PROGRESS4003", "해당 책에 접근할 권한이 없습니다."),
-    PROGRESS_DELETE_FAILED(HttpStatus.BAD_REQUEST, "PROGRESS4004", "삭제할 진도가 존재하지 않습니다.");
+    PROGRESS_DELETE_FAILED(HttpStatus.BAD_REQUEST, "PROGRESS4004", "삭제할 진도가 존재하지 않습니다."),
+
+    // Admin
+    BOOK_ALREADY_SUMMARIZED(HttpStatus.BAD_REQUEST, "ADMIN4001", "이미 요약이 완료된 책입니다."),
+    CHAPTER_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4002", "해당 챕터를 찾을 수 없습니다."),
+    CHAPTER_ALREADY_SUMMARIZED(HttpStatus.BAD_REQUEST, "ADMIN4003", "이미 요약이 완료된 챕터입니다."),
+    CHARACTER_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4004", "해당 인물을 찾을 수 없습니다."),
+    JSON_PARSING_ERROR(HttpStatus.BAD_REQUEST, "ADMIN4005", "JSON 파일 파싱에 실패했습니다."),
+    BOOK_CHARACTER_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4006", "해당 책에 등록된 인물이 아닙니다."); // 여기가 수정되었습니다 (세미콜론 추가)
 
     private final HttpStatus httpStatus;
     private final String code;

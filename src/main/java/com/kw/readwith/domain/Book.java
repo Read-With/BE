@@ -31,8 +31,14 @@ public class Book extends BaseEntity {
     @Column(nullable = false)
     private boolean isDefault;
 
+    @Column(nullable = false)
+    private boolean summary = false;
+
     @Column(name = "cover_img_url", length = 255)
     private String coverImgUrl;
+
+    @Column(name = "summary_url", length = 255)
+    private String summaryUrl;
 
     @Column(name = "epub_path", length = 255)
     private String epubPath;
@@ -56,4 +62,16 @@ public class Book extends BaseEntity {
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
     private List<Favorite> favorites = new ArrayList<>();
+
+    /**
+     * 비즈니스 로직
+     */
+    public void updateSummary(String summaryUrl) {
+        this.summary = true;
+        this.summaryUrl = summaryUrl;
+    }
+
+    public void completeSummary() {
+        this.summary = true;
+    }
 }

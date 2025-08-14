@@ -51,8 +51,7 @@ public class BookController {
                                                     @RequestPart("title") String title,
                                                     @RequestPart("author") String author,
                                                     @RequestPart("language") String language) {
-        Long userId = 1L; // TODO 인증된 사용자
-        BookDetailDTO response = bookService.uploadBook(userId, file, title, author, language);
+        BookDetailDTO response = bookService.uploadBook(file, title, author, language);
         return ResponseEntity.ok(response);
     }
 } 
