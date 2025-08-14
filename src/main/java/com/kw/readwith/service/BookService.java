@@ -90,17 +90,6 @@ public class BookService {
         return BookDetailDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).language(book.getLanguage()).isDefault(book.isDefault()).coverImgUrl(book.getCoverImgUrl()).epubPath(book.getEpubPath()).isFavorite(isFavorite).build();
     }
 
-    @Transactional
-    public BookDetailDTO uploadBookSummary(Long bookId, MultipartFile summaryFile) {
-        Book book = bookRepository.findById(bookId).orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-        if (book.isSummary()) {
-            throw new GeneralException(ErrorStatus.BOOK_ALREADY_SUMMARIZED);
-        }
-        String summaryUrl = "https://s3-dummy-url.com/summaries/books/" + summaryFile.getOriginalFilename();
-        book.updateSummary(summaryUrl);
-        return convertToDetailDTO(book, false);
-    }
-
     public List<UnsummarizedItemDTO> getUnsummarizedChapters() {
         return chapterRepository.findUnsummarizedChapters().stream().map(UnsummarizedItemDTO::from).collect(Collectors.toList());
     }
@@ -110,36 +99,41 @@ public class BookService {
     @NoArgsConstructor
     private static class PovSummaryData {
         private String character_name;
-        // JSON의 'summary' 키와 정확히 일치시킴
         private String summary;
     }
 
     @Transactional
     public void uploadChapterSummary(Long bookId, Integer idx, MultipartFile summaryFile) {
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, idx).orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, idx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
         if (chapter.isPovSummariesCached()) {
             throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED);
         }
+
         Map<String, PovSummaryData> summaries;
         try {
             summaries = objectMapper.readValue(summaryFile.getInputStream(), new TypeReference<>() {});
         } catch (IOException e) {
             throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
         }
+
         for (Map.Entry<String, PovSummaryData> entry : summaries.entrySet()) {
-            Long characterId = Long.parseLong(entry.getKey());
+            Long characterIdInBook = Long.parseLong(entry.getKey());
             PovSummaryData summaryData = entry.getValue();
-            Character character = characterRepository.findById(characterId).orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND));
+
+            Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterIdInBook)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND));
 
             CharacterPovSummary povSummary = CharacterPovSummary.builder()
                     .book(chapter.getBook())
                     .chapter(chapter)
                     .character(character)
-                    // summaryData.getSummary()를 호출하여 'summary' 값을 가져옴
                     .summaryText(summaryData.getSummary())
                     .build();
             characterPovSummaryRepository.save(povSummary);
         }
+
         chapter.markAsSummarized();
         checkAndUpdateBookSummaryStatus(chapter.getBook());
     }
