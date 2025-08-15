@@ -12,4 +12,7 @@ public interface CharacterRepository extends JpaRepository<Character, Long> {
 
     // Book과 characterId로 Character를 찾는 새로운 메소드 추가
     Optional<Character> findByBookAndCharacterId(Book book, Long characterId);
+
+    // Book과 name으로 Character를 찾는 메소드
+    Optional<Character> findByBookAndName(Book book, String name);
 }

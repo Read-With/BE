@@ -32,6 +32,10 @@ public class Character extends BaseEntity {
     @Column(length = 120, nullable = false)
     private String name;
 
+    // 인물이 불리는 다른 이름들
+    @Column
+    private String names;
+
     @Column(name = "profile_image", length = 255)
     private String profileImage;
 
@@ -43,6 +47,11 @@ public class Character extends BaseEntity {
     @Lob
     @Column(columnDefinition = "TEXT")
     private String personalityText;
+
+    // 프로필 묘사 필드 추가
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String profileText;
 
     @Lob
     @Column(columnDefinition = "LONGBLOB")
