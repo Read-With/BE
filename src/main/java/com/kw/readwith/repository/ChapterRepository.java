@@ -15,6 +15,7 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     @Query("SELECT c FROM Chapter c WHERE c.povSummariesCached = false AND c.summaryUploadUrl IS NOT NULL")
     List<Chapter> findUnsummarizedChapters();
 
+    // bookId와 chapterIdx로 확인
     @Query("SELECT c FROM Chapter c JOIN FETCH c.book WHERE c.book.id = :bookId AND c.idx = :idx")
     Optional<Chapter> findByBookIdAndIdx(@Param("bookId") Long bookId, @Param("idx") int idx);
 
