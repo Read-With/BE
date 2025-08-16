@@ -1,4 +1,4 @@
-package com.kw.readwith.web.dto;
+package com.kw.readwith.dto.admin;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -7,6 +7,6 @@ import java.util.List;
 
 @Getter
 @NoArgsConstructor
-public class CharacterListDto {
-    private List<CharacterDto> characters;
+public class CharacterListDTO {
+    private List<CharacterDTO> characters;
 }

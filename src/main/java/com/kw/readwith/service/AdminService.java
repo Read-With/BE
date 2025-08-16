@@ -8,7 +8,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
-import com.kw.readwith.dto.admin.CharacterInfoDTO;
+import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.EventDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -37,35 +37,31 @@ public class AdminService {
     private final ObjectMapper objectMapper;
 
     public void uploadCharacters(Long bookId, MultipartFile file) {
-        // 1. bookId로 Book 엔터티 조회
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         try {
-            // 2. JSON 파일을 DTO로 파싱
-            CharacterInfoDTO.CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterInfoDTO.CharacterListDTO.class);
+            CharacterDTO.CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterDTO.CharacterListDTO.class);
 
             List<Character> newCharacters = new ArrayList<>();
-            for (CharacterInfoDTO dto : characterListDTO.getCharacters()) {
-                // 3. 해당 책에 이 이름을 가진 인물이 이미 있는지 확인
-                Optional<Character> existingCharacter = characterRepository.findByBookAndName(book, dto.getCommonName());
+            for (CharacterDTO dto : characterListDTO.getCharacters()) {
+                // snake_case 필드에 맞는 getter 호출
+                Optional<Character> existingCharacter = characterRepository.findByBookAndName(book, dto.getCommon_name());
 
-                // 4. 존재하지 않을 경우에만, 새로운 Character 엔티티를 생성하여 리스트에 추가
                 if (existingCharacter.isEmpty()) {
                     Character character = Character.builder()
                             .book(book)
                             .characterId(dto.getId().longValue())
-                            .name(dto.getCommonName()) // DTO 필드명 변경 적용
+                            .name(dto.getCommon_name())
                             .names(String.join(",", dto.getNames()))
-                            .isMainCharacter(dto.isMainCharacter())
+                            .isMainCharacter(dto.isMain_character())
                             .personalityText(dto.getDescription())
-                            .profileText(dto.getPortraitPrompt()) // profile_text 저장 로직 추가
+                            .profileText(dto.getPortrait_prompt())
                             .build();
                     newCharacters.add(character);
                 }
             }
 
-            // 5. 새로 추가할 인물들이 있을 경우에만, 데이터베이스에 한 번에 저장
             if (!newCharacters.isEmpty()) {
                 characterRepository.saveAll(newCharacters);
             }
@@ -75,10 +71,12 @@ public class AdminService {
         }
     }
 
-    public void uploadEvents(Long bookId, Long chapterId, MultipartFile file) {
+    public void uploadEvents(Long bookId, Integer chapterIdx, MultipartFile file) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-        Chapter chapter = chapterRepository.findById(chapterId)
+
+        // Repository의 기존 메소드에 맞게 book.getId()와 chapterIdx를 전달
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), chapterIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
 
         // 해당 책에 속한 챕터가 맞는지 확인
@@ -117,4 +115,3 @@ public class AdminService {
         }
     }
 }
-    
