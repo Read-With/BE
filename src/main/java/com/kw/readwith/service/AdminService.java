@@ -32,8 +32,8 @@ public class AdminService {
 
     private final BookRepository bookRepository;
     private final CharacterRepository characterRepository;
-    private final ChapterRepository chapterRepository; // [추가됨]
-    private final EventRepository eventRepository;       // [추가됨]
+    private final ChapterRepository chapterRepository;
+    private final EventRepository eventRepository;
     private final ObjectMapper objectMapper;
 
     public void uploadCharacters(Long bookId, MultipartFile file) {
@@ -75,7 +75,6 @@ public class AdminService {
         }
     }
 
-    // [추가된 메소드]
     public void uploadEvents(Long bookId, Long chapterId, MultipartFile file) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
@@ -85,6 +84,11 @@ public class AdminService {
         // 해당 책에 속한 챕터가 맞는지 확인
         if (!chapter.getBook().getId().equals(book.getId())) {
             throw new GeneralException(ErrorStatus.CHAPTER_NOT_BELONG_TO_BOOK);
+        }
+
+        // Book과 Chapter를 함께 사용하여 데이터가 이미 존재하는지 확인
+        if (eventRepository.existsByBookAndChapter(book, chapter)) {
+            throw new GeneralException(ErrorStatus.EVENT_DATA_ALREADY_EXISTS);
         }
 
         try {
