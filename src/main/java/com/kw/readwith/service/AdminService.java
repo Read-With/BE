@@ -1,13 +1,19 @@
 package com.kw.readwith.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
+import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
+import com.kw.readwith.domain.Event;
 import com.kw.readwith.dto.admin.CharacterInfoDTO;
+import com.kw.readwith.dto.admin.EventDTO;
 import com.kw.readwith.repository.BookRepository;
+import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +23,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +32,8 @@ public class AdminService {
 
     private final BookRepository bookRepository;
     private final CharacterRepository characterRepository;
+    private final ChapterRepository chapterRepository; // [추가됨]
+    private final EventRepository eventRepository;       // [추가됨]
     private final ObjectMapper objectMapper;
 
     public void uploadCharacters(Long bookId, MultipartFile file) {
@@ -65,4 +74,43 @@ public class AdminService {
             throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
         }
     }
+
+    // [추가된 메소드]
+    public void uploadEvents(Long bookId, Long chapterId, MultipartFile file) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        Chapter chapter = chapterRepository.findById(chapterId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        // 해당 책에 속한 챕터가 맞는지 확인
+        if (!chapter.getBook().getId().equals(book.getId())) {
+            throw new GeneralException(ErrorStatus.CHAPTER_NOT_BELONG_TO_BOOK);
+        }
+
+        try {
+            // JSON 파일을 DTO 리스트로 파싱
+            List<EventDTO> eventDTOs = objectMapper.readValue(file.getInputStream(), new TypeReference<List<EventDTO>>() {});
+
+            // DTO를 Entity로 변환
+            List<Event> newEvents = eventDTOs.stream()
+                    .map(dto -> Event.builder()
+                            .startPos(dto.getStart())
+                            .endPos(dto.getEnd())
+                            .rawText(dto.getText())
+                            .idx(dto.getEventId())
+                            .chapter(chapter)
+                            .book(book)
+                            .build())
+                    .collect(Collectors.toList());
+
+            // 데이터베이스에 저장
+            if (!newEvents.isEmpty()) {
+                eventRepository.saveAll(newEvents);
+            }
+
+        } catch (IOException e) {
+            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+        }
+    }
 }
+    

@@ -1,51 +1,39 @@
 package com.kw.readwith.domain;
 
-import com.kw.readwith.domain.cache.EventCharacterStat;
 import com.kw.readwith.domain.common.BaseEntity;
-import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.util.ArrayList;
-import java.util.List;
-
-/* ─────────────── Event ────────────────────────── */
-@Entity @Table(name = "book_event",
-        indexes = @Index(columnList = "chapter_id, idx", unique = true))
+@Entity(name = "book_event") // 테이블 이름 명시
 @Getter
 @Builder
-@NoArgsConstructor(access = AccessLevel.PROTECTED) @AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
 public class Event extends BaseEntity {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(nullable = false)
-    private Chapter chapter;
+    @Column(nullable = false)
+    private Integer startPos;
 
     @Column(nullable = false)
-    private int idx;          // within chapter
+    private Integer endPos;
 
-    private int pageStart;
-    private int pageEnd;
-    private int startPos;
-    private int endPos;
-
-    @Lob @Column(columnDefinition = "TEXT")
+    @Lob
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String rawText;
 
-    @Lob
-    @Column(columnDefinition = "TEXT")
-    private String summaryText;
+    @Column(nullable = false)
+    private Integer idx;
 
-    @Lob
-    @Column(columnDefinition = "LONGBLOB")   // 🔄 vector → LONGBLOB
-    private byte[] embeddingVector; // byte[] 직렬화
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chapter_id")
+    private Chapter chapter;
 
-    /* 관계 */
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
-    private List<EventCharacterStat> charStats = new ArrayList<>();
-
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
-    private List<EventRelationshipEdge> edges = new ArrayList<>();
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "book_id")
+    private Book book;
 }
+    

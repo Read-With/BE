@@ -56,4 +56,15 @@ public class AdminController {
         adminService.uploadCharacters(bookId, file);
         return ApiResponse.onSuccess("Characters have been successfully uploaded.");
     }
+
+    @Operation(summary = "이벤트 정보 업로드 API", description = "특정 챕터에 대한 이벤트 정보가 담긴 JSON 파일을 업로드합니다.")
+    @PostMapping(value = "/books/{bookId}/chapters/{chapterId}/events", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> uploadEvents(
+            @Parameter(description = "이벤트를 추가할 책의 ID") @PathVariable(name = "bookId") Long bookId,
+            @Parameter(description = "이벤트를 추가할 챕터의 ID") @PathVariable(name = "chapterId") Long chapterId,
+            @Parameter(description = "이벤트 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
+        adminService.uploadEvents(bookId, chapterId, file);
+        return ApiResponse.onSuccess("Events have been successfully uploaded.");
+    }
 }
+    
