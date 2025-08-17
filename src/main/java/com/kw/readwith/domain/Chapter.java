@@ -41,6 +41,9 @@ public class Chapter extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String summaryText;
 
+    @Column(name = "summary_upload_url", length = 255)
+    private String summaryUploadUrl;
+
     @Column(nullable = false)
     private boolean povSummariesCached;
 
@@ -53,4 +56,16 @@ public class Chapter extends BaseEntity {
 
     @OneToMany(mappedBy = "chapter", cascade = CascadeType.ALL)
     private List<CharacterPovSummary> povSummaries = new ArrayList<>();
+
+    /**
+     * 비즈니스 로직
+     */
+    public void markAsSummarized() {
+        this.povSummariesCached = true;
+        this.summaryUploadUrl = null; // JSON을 직접 파싱하여 저장하므로 URL은 null로 처리
+    }
+
+    public void setSummaryText(String summaryText) {
+        this.summaryText = summaryText;
+    }
 }

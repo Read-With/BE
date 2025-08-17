@@ -31,16 +31,17 @@ public class Book extends BaseEntity {
     @Column(nullable = false)
     private boolean isDefault;
 
+    @Column(nullable = false)
+    private boolean summary = false;
+
     @Column(name = "cover_img_url", length = 255)
     private String coverImgUrl;
 
+    @Column(name = "summary_url", length = 255)
+    private String summaryUrl;
+
     @Column(name = "epub_path", length = 255)
     private String epubPath;
-
-    // 분석 정보(관계정보·통계 등)가 업로드되었는지 여부
-    @Column(name = "info_uploaded", nullable = false)
-    @Builder.Default
-    private boolean infoUploaded = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_user_id")
@@ -61,4 +62,16 @@ public class Book extends BaseEntity {
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
     private List<Favorite> favorites = new ArrayList<>();
+
+    /**
+     * 비즈니스 로직
+     */
+    public void updateSummary(String summaryUrl) {
+        this.summary = true;
+        this.summaryUrl = summaryUrl;
+    }
+
+    public void completeSummary() {
+        this.summary = true;
+    }
 }

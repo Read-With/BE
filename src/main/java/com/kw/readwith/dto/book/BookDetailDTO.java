@@ -14,4 +14,5 @@ public class BookDetailDTO {
     private String coverImgUrl;
     private String epubPath;
     private boolean isFavorite;
+    private boolean summary;
 } 

@@ -1,21 +1,35 @@
 package com.kw.readwith.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.aws.s3.AmazonS3Manager;
 import com.kw.readwith.domain.Book;
+import com.kw.readwith.domain.Chapter;
+import com.kw.readwith.domain.Character;
+import com.kw.readwith.domain.User;
+import com.kw.readwith.domain.mapping.CharacterPovSummary;
+import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
+import com.kw.readwith.repository.ChapterRepository;
+import com.kw.readwith.repository.CharacterPovSummaryRepository;
+import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
-import com.kw.readwith.domain.User;
-import com.kw.readwith.aws.s3.AmazonS3Manager;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,18 +42,28 @@ public class BookService {
     private final FavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
     private final AmazonS3Manager amazonS3Manager;
+    private final ChapterRepository chapterRepository;
+    private final CharacterRepository characterRepository;
+    private final CharacterPovSummaryRepository characterPovSummaryRepository;
+    private final ObjectMapper objectMapper;
 
     /**
      * 도서 목록 조회 (검색/필터/정렬/즐겨찾기)
+     * 접근 가능한 도서: summary = true AND (isDefault = true OR uploadedBy.id = userId)
      */
     public List<BookSummaryDTO> getBooks(String keyword,
                                          String language,
                                          Boolean favoriteOnly,
                                          String sortBy,
                                          Long userId) {
-        List<Book> books = bookRepository.findAll().stream()
-                .filter(b -> b.isInfoUploaded() || b.isDefault())
-                .collect(Collectors.toList());
+        List<Book> books;
+        if (userId == null) {
+            // 비로그인 사용자: 기본 제공 + 요약 완료만
+            books = bookRepository.findBySummaryTrueAndIsDefaultTrue();
+        } else {
+            // 로그인 사용자: 기본 제공 + 본인 업로드 + 요약 완료만
+            books = bookRepository.findAccessibleBooks(userId);
+        }
 
         // 검색
         if (keyword != null && !keyword.isBlank()) {
@@ -87,8 +111,10 @@ public class BookService {
                         .title(book.getTitle())
                         .author(book.getAuthor())
                         .coverImgUrl(book.getCoverImgUrl())
+                        .epubPath(book.getEpubPath())
                         .isDefault(book.isDefault())
                         .isFavorite(favoriteBookIds.contains(book.getId()))
+                        .summary(book.isSummary())
                         .updatedAt(book.getUpdatedAt())
                         .build())
                 .collect(Collectors.toList());
@@ -96,11 +122,19 @@ public class BookService {
 
     /**
      * 단일 도서 조회
+     * 접근 가능한 도서: summary = true AND (isDefault = true OR uploadedBy.id = userId)
      */
     public BookDetailDTO getBook(Long bookId, Long userId) {
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.isInfoUploaded() || b.isDefault())
-                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        Book book;
+        if (userId == null) {
+            // 비로그인 사용자: 기본 제공 + 요약 완료만
+            book = bookRepository.findByIdAndSummaryTrueAndIsDefaultTrue(bookId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        } else {
+            // 로그인 사용자: 기본 제공 + 본인 업로드 + 요약 완료만
+            book = bookRepository.findAccessibleBook(bookId, userId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        }
 
         boolean isFavorite = false;
         if (userId != null) {
@@ -135,8 +169,8 @@ public class BookService {
                 .isDefault(false)
                 .coverImgUrl(null)
                 .epubPath(epubUrl)
-                .infoUploaded(false)
                 .uploadedBy(uploader)
+                .summary(false)
                 .build();
 
         Book saved = bookRepository.save(book);
@@ -153,6 +187,77 @@ public class BookService {
                 .coverImgUrl(book.getCoverImgUrl())
                 .epubPath(book.getEpubPath())
                 .isFavorite(isFavorite)
+                .summary(book.isSummary())
                 .build();
     }
-} 
+    @Transactional
+    public BookDetailDTO uploadBookSummary(Long bookId, MultipartFile summaryFile) {
+        Book book = bookRepository.findById(bookId).orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        if (book.isSummary()) {
+            throw new GeneralException(ErrorStatus.BOOK_ALREADY_SUMMARIZED);
+        }
+        String summaryUrl = "https://s3-dummy-url.com/summaries/books/" + summaryFile.getOriginalFilename();
+        book.updateSummary(summaryUrl);
+        return convertToDetailDTO(book, false);
+    }
+
+    public List<UnsummarizedItemDTO> getUnsummarizedChapters() {
+        return chapterRepository.findUnsummarizedChapters().stream().map(UnsummarizedItemDTO::from).collect(Collectors.toList());
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    private static class PovSummaryData {
+        private String character_name;
+        // JSON의 'summary' 키와 정확히 일치시킴
+        private String summary;
+    }
+
+    @Transactional
+    public void uploadChapterSummary(Long bookId, Integer idx, MultipartFile summaryFile) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, idx).orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        if (chapter.isPovSummariesCached()) {
+            throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED);
+        }
+        Map<String, PovSummaryData> summaries;
+        try {
+            summaries = objectMapper.readValue(summaryFile.getInputStream(), new TypeReference<>() {});
+        } catch (IOException e) {
+            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+        }
+        for (Map.Entry<String, PovSummaryData> entry : summaries.entrySet()) {
+            Long characterId = Long.parseLong(entry.getKey());
+            PovSummaryData summaryData = entry.getValue();
+            Character character = characterRepository.findById(characterId).orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND));
+
+            CharacterPovSummary povSummary = CharacterPovSummary.builder()
+                    .book(chapter.getBook())
+                    .chapter(chapter)
+                    .character(character)
+                    // summaryData.getSummary()를 호출하여 'summary' 값을 가져옴
+                    .summaryText(summaryData.getSummary())
+                    .build();
+            characterPovSummaryRepository.save(povSummary);
+        }
+        chapter.markAsSummarized();
+        checkAndUpdateBookSummaryStatus(chapter.getBook());
+    }
+
+    private void checkAndUpdateBookSummaryStatus(Book book) {
+        if (book.isSummary()) {
+            return;
+        }
+        List<Chapter> chapters = chapterRepository.findByBookId(book.getId());
+        boolean allChaptersSummarized = chapters.stream().allMatch(Chapter::isPovSummariesCached);
+        if (allChaptersSummarized) {
+            book.completeSummary();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<BookSummaryDTO> getUnsummarizedBooks() {
+        List<Book> books = bookRepository.findBySummaryIsFalse();
+        return books.stream().map(book -> BookSummaryDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).coverImgUrl(book.getCoverImgUrl()).isDefault(book.isDefault()).isFavorite(false).updatedAt(book.getUpdatedAt()).build()).collect(Collectors.toList());
+    }
+}
