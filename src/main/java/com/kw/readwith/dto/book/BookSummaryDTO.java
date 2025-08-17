@@ -12,7 +12,9 @@ public class BookSummaryDTO {
     private String title;
     private String author;
     private String coverImgUrl;
+    private String epubPath;
     private boolean isFavorite;
     private boolean isDefault;
+    private boolean summary;
     private LocalDateTime updatedAt;
 } 

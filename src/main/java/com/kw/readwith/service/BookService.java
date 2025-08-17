@@ -49,15 +49,21 @@ public class BookService {
 
     /**
      * 도서 목록 조회 (검색/필터/정렬/즐겨찾기)
+     * 접근 가능한 도서: summary = true AND (isDefault = true OR uploadedBy.id = userId)
      */
     public List<BookSummaryDTO> getBooks(String keyword,
                                          String language,
                                          Boolean favoriteOnly,
                                          String sortBy,
                                          Long userId) {
-        List<Book> books = bookRepository.findAll().stream()
-                .filter(b -> b.isInfoUploaded() || b.isDefault())
-                .collect(Collectors.toList());
+        List<Book> books;
+        if (userId == null) {
+            // 비로그인 사용자: 기본 제공 + 요약 완료만
+            books = bookRepository.findBySummaryTrueAndIsDefaultTrue();
+        } else {
+            // 로그인 사용자: 기본 제공 + 본인 업로드 + 요약 완료만
+            books = bookRepository.findAccessibleBooks(userId);
+        }
 
         // 검색
         if (keyword != null && !keyword.isBlank()) {
@@ -105,8 +111,10 @@ public class BookService {
                         .title(book.getTitle())
                         .author(book.getAuthor())
                         .coverImgUrl(book.getCoverImgUrl())
+                        .epubPath(book.getEpubPath())
                         .isDefault(book.isDefault())
                         .isFavorite(favoriteBookIds.contains(book.getId()))
+                        .summary(book.isSummary())
                         .updatedAt(book.getUpdatedAt())
                         .build())
                 .collect(Collectors.toList());
@@ -114,11 +122,19 @@ public class BookService {
 
     /**
      * 단일 도서 조회
+     * 접근 가능한 도서: summary = true AND (isDefault = true OR uploadedBy.id = userId)
      */
     public BookDetailDTO getBook(Long bookId, Long userId) {
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.isInfoUploaded() || b.isDefault())
-                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        Book book;
+        if (userId == null) {
+            // 비로그인 사용자: 기본 제공 + 요약 완료만
+            book = bookRepository.findByIdAndSummaryTrueAndIsDefaultTrue(bookId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        } else {
+            // 로그인 사용자: 기본 제공 + 본인 업로드 + 요약 완료만
+            book = bookRepository.findAccessibleBook(bookId, userId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        }
 
         boolean isFavorite = false;
         if (userId != null) {
@@ -153,8 +169,8 @@ public class BookService {
                 .isDefault(false)
                 .coverImgUrl(null)
                 .epubPath(epubUrl)
-                .infoUploaded(false)
                 .uploadedBy(uploader)
+                .summary(false)
                 .build();
 
         Book saved = bookRepository.save(book);
@@ -171,6 +187,7 @@ public class BookService {
                 .coverImgUrl(book.getCoverImgUrl())
                 .epubPath(book.getEpubPath())
                 .isFavorite(isFavorite)
+                .summary(book.isSummary())
                 .build();
     }
     @Transactional

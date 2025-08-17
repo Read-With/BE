@@ -43,11 +43,6 @@ public class Book extends BaseEntity {
     @Column(name = "epub_path", length = 255)
     private String epubPath;
 
-    // 분석 정보(관계정보·통계 등)가 업로드되었는지 여부
-    @Column(name = "info_uploaded", nullable = false)
-    @Builder.Default
-    private boolean infoUploaded = false;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_user_id")
     private User uploadedBy;   // null == 서버 기본 제공
