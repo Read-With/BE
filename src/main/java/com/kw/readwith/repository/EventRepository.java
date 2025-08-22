@@ -5,8 +5,13 @@ import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Event;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
+
 public interface EventRepository extends JpaRepository<Event, Long> {
 
-    // Book과 Chapter를 기준으로 데이터 존재 여부를 확인.
     boolean existsByBookAndChapter(Book book, Chapter chapter);
+    Optional<Event> findByChapterAndIdx(Chapter chapter, Integer idx);
+
+    // [FIX] Book, Chapter, idx를 모두 사용하여 Event를 찾는 필수 메소드
+    Optional<Event> findByBookAndChapterAndIdx(Book book, Chapter chapter, Integer idx);
 }

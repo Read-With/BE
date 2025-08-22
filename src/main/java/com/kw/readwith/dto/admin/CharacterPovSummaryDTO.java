@@ -1,4 +1,4 @@
-package com.kw.readwith.dto;
+package com.kw.readwith.dto.admin;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

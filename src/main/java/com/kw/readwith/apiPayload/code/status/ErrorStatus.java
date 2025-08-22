@@ -44,7 +44,10 @@ public enum ErrorStatus implements BaseErrorCode {
     JSON_PARSING_ERROR(HttpStatus.BAD_REQUEST, "ADMIN4005", "JSON 파일 파싱에 실패했습니다."),
     BOOK_CHARACTER_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4006", "해당 책에 등록된 인물이 아닙니다."),
     CHAPTER_NOT_BELONG_TO_BOOK(HttpStatus.BAD_REQUEST, "ADMIN4007", "해당 책에 속한 챕터가 아닙니다."),
-    EVENT_DATA_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "ADMIN4008", "해당 챕터의 이벤트 데이터가 이미 존재합니다."); // [추가]
+    EVENT_DATA_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "ADMIN4008", "해당 챕터의 이벤트 데이터가 이미 존재합니다."),
+    EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4009", "해당 이벤트를 찾을 수 없습니다."),
+    RELATIONSHIP_DATA_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "ADMIN4010", "해당 이벤트의 관계 데이터가 이미 존재합니다.");
+
 
     private final HttpStatus httpStatus;
     private final String code;
