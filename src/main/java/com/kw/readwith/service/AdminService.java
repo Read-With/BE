@@ -9,7 +9,6 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.Character;
-import com.kw.readwith.domain.enums.SentimentLabel;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.EventDTO;
@@ -54,6 +53,7 @@ public class AdminService {
 
             List<Character> newCharacters = new ArrayList<>();
             for (CharacterDTO dto : characterListDTO.getCharacters()) {
+                // snake_case 필드에 맞는 getter 호출
                 Optional<Character> existingCharacter = characterRepository.findByBookAndName(book, dto.getCommon_name());
 
                 if (existingCharacter.isEmpty()) {
@@ -70,6 +70,7 @@ public class AdminService {
                 }
             }
 
+            // 데이터베이스에 저장
             if (!newCharacters.isEmpty()) {
                 characterRepository.saveAll(newCharacters);
             }
@@ -84,20 +85,25 @@ public class AdminService {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
+        // Repository의 기존 메소드에 맞게 book.getId()와 chapterIdx를 전달
         Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), chapterIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
 
+        // 해당 책에 속한 챕터가 맞는지 확인
         if (!chapter.getBook().getId().equals(book.getId())) {
             throw new GeneralException(ErrorStatus.CHAPTER_NOT_BELONG_TO_BOOK);
         }
 
+        // Book과 Chapter를 함께 사용하여 데이터가 이미 존재하는지 확인
         if (eventRepository.existsByBookAndChapter(book, chapter)) {
             throw new GeneralException(ErrorStatus.EVENT_DATA_ALREADY_EXISTS);
         }
 
         try {
+            // JSON 파일을 DTO 리스트로 파싱
             List<EventDTO> eventDTOs = objectMapper.readValue(file.getInputStream(), new TypeReference<List<EventDTO>>() {});
 
+            // DTO를 Entity로 변환
             List<Event> newEvents = eventDTOs.stream()
                     .map(dto -> Event.builder()
                             .startPos(dto.getStart())
@@ -109,6 +115,7 @@ public class AdminService {
                             .build())
                     .collect(Collectors.toList());
 
+            // 데이터베이스에 저장
             if (!newEvents.isEmpty()) {
                 eventRepository.saveAllAndFlush(newEvents);
             }
@@ -129,12 +136,14 @@ public class AdminService {
         Event event = eventRepository.findByBookAndChapterAndIdx(book, chapter, eventIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
 
+        // 데이터가 이미 존재하는지 확인
         if (eventRelationshipEdgeRepository.existsByEvent(event)) {
             throw new GeneralException(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS);
         }
 
         RelationshipUploadDTO uploadDTO;
         try {
+            // JSON 파일을 DTO로 파싱
             uploadDTO = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
         } catch (IOException e) {
             throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
@@ -142,12 +151,14 @@ public class AdminService {
 
         List<EventRelationshipEdge> newEdges = new ArrayList<>();
         for (RelationshipDTO dto : uploadDTO.getRelations()) {
+            // DTO에서 Character 찾아오기
             Character fromChar = characterRepository.findByBookAndCharacterId(book, dto.getId1().longValue())
                     .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "From Character not found with jsonId: " + dto.getId1()));
             Character toChar = characterRepository.findByBookAndCharacterId(book, dto.getId2().longValue())
                     .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "To Character not found with jsonId: " + dto.getId2()));
 
             try {
+                // DTO를 Entity로 변환
                 EventRelationshipEdge edge = EventRelationshipEdge.builder()
                         .fromCharacter(fromChar)
                         .toCharacter(toChar)
@@ -156,7 +167,6 @@ public class AdminService {
                         .sentimentScore(dto.getPositivity().floatValue())
                         .interactionCount(dto.getCount())
                         .relationTags(objectMapper.writeValueAsString(dto.getRelation()))
-                        .sentimentLabel(determineSentimentLabel(dto.getPositivity().floatValue()))
                         .build();
                 newEdges.add(edge);
             } catch (JsonProcessingException e) {
@@ -164,18 +174,9 @@ public class AdminService {
             }
         }
 
+        // 데이터베이스에 저장
         if (!newEdges.isEmpty()) {
             eventRelationshipEdgeRepository.saveAll(newEdges);
-        }
-    }
-
-    private SentimentLabel determineSentimentLabel(float score) {
-        if (score > 0.3) {
-            return SentimentLabel.POS;
-        } else if (score < -0.3) {
-            return SentimentLabel.NEG;
-        } else {
-            return SentimentLabel.NEU;
         }
     }
 }
