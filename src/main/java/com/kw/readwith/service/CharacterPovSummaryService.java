@@ -6,7 +6,7 @@ import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
-import com.kw.readwith.dto.CharacterPovSummaryDTO;
+import com.kw.readwith.dto.admin.CharacterPovSummaryDTO;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import com.kw.readwith.repository.CharacterRepository;

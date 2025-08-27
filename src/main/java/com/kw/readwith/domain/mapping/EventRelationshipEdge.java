@@ -6,47 +6,45 @@ import com.kw.readwith.domain.common.BaseEntity;
 import com.kw.readwith.domain.enums.SentimentLabel;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
-/* ─────────────── EventRelationshipEdge ────────────────────────── */
 @Entity
 @Getter
 @Builder
-@NoArgsConstructor(access = AccessLevel.PROTECTED) @AllArgsConstructor
-@Table(indexes = {
-        @Index(columnList = "event_id, from_char_id, to_char_id", unique = true)
-})
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
 public class EventRelationshipEdge extends BaseEntity {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(nullable = false)
-    private Event event;
-
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "from_char_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "from_char_id")
     private Character fromCharacter;
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "to_char_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "to_char_id")
     private Character toCharacter;
 
-    private int interactionCount;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id")
+    private Event event;
 
-    @Enumerated(EnumType.STRING) @Column(length = 3)
-    private SentimentLabel sentimentLabel;
-
-    private float sentimentScore;
-
-    @JdbcTypeCode(SqlTypes.JSON)             // Hibernate 6
-    @Column(columnDefinition = "json")
-    private String relationTags;
-
-    @Lob @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String explanation;
 
-    @Column(length = 7)
+    @Column(columnDefinition = "JSON")
+    private String relationTags;
+
+    private Integer interactionCount;
+
+    private Float sentimentScore;
+
+    @Enumerated(EnumType.STRING)
+    private SentimentLabel sentimentLabel;
+
     private String edgeColorHex;
 
-    private float edgeWidth;
+    @Column(name = "edge_weight")
+    private Float edgeWeight;
 }

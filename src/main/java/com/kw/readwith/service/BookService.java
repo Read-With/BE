@@ -215,8 +215,8 @@ public class BookService {
     }
 
     @Transactional
-    public void uploadChapterSummary(Long bookId, Integer idx, MultipartFile summaryFile) {
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, idx).orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+    public void uploadChapterSummary(Long bookId, Integer chapterIdx, MultipartFile summaryFile) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx).orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
         if (chapter.isPovSummariesCached()) {
             throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED);
         }

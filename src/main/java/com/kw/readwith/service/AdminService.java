@@ -1,21 +1,26 @@
 package com.kw.readwith.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
-import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
+import com.kw.readwith.domain.Character;
+import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.EventDTO;
-import com.kw.readwith.repository.BookRepository;
-import com.kw.readwith.repository.ChapterRepository;
-import com.kw.readwith.repository.CharacterRepository;
-import com.kw.readwith.repository.EventRepository;
+import com.kw.readwith.dto.admin.RelationshipDTO;
+import com.kw.readwith.dto.admin.RelationshipUploadDTO;
+import com.kw.readwith.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,15 +32,18 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class AdminService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminService.class);
 
     private final BookRepository bookRepository;
     private final CharacterRepository characterRepository;
     private final ChapterRepository chapterRepository;
     private final EventRepository eventRepository;
+    private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final ObjectMapper objectMapper;
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void uploadCharacters(Long bookId, MultipartFile file) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
@@ -62,6 +70,7 @@ public class AdminService {
                 }
             }
 
+            // 데이터베이스에 저장
             if (!newCharacters.isEmpty()) {
                 characterRepository.saveAll(newCharacters);
             }
@@ -71,6 +80,7 @@ public class AdminService {
         }
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void uploadEvents(Long bookId, Integer chapterIdx, MultipartFile file) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
@@ -107,11 +117,66 @@ public class AdminService {
 
             // 데이터베이스에 저장
             if (!newEvents.isEmpty()) {
-                eventRepository.saveAll(newEvents);
+                eventRepository.saveAllAndFlush(newEvents);
             }
 
         } catch (IOException e) {
             throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
+    public void uploadRelationships(Long bookId, Integer chapterIdx, Integer eventIdx, MultipartFile file) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        Event event = eventRepository.findByBookAndChapterAndIdx(book, chapter, eventIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
+
+        // 데이터가 이미 존재하는지 확인
+        if (eventRelationshipEdgeRepository.existsByEvent(event)) {
+            throw new GeneralException(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS);
+        }
+
+        RelationshipUploadDTO uploadDTO;
+        try {
+            // JSON 파일을 DTO로 파싱
+            uploadDTO = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
+        } catch (IOException e) {
+            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+        }
+
+        List<EventRelationshipEdge> newEdges = new ArrayList<>();
+        for (RelationshipDTO dto : uploadDTO.getRelations()) {
+            // DTO에서 Character 찾아오기
+            Character fromChar = characterRepository.findByBookAndCharacterId(book, dto.getId1().longValue())
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "From Character not found with jsonId: " + dto.getId1()));
+            Character toChar = characterRepository.findByBookAndCharacterId(book, dto.getId2().longValue())
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "To Character not found with jsonId: " + dto.getId2()));
+
+            try {
+                // DTO를 Entity로 변환
+                EventRelationshipEdge edge = EventRelationshipEdge.builder()
+                        .fromCharacter(fromChar)
+                        .toCharacter(toChar)
+                        .event(event)
+                        .edgeWeight(dto.getWeight().floatValue())
+                        .sentimentScore(dto.getPositivity().floatValue())
+                        .interactionCount(dto.getCount())
+                        .relationTags(objectMapper.writeValueAsString(dto.getRelation()))
+                        .build();
+                newEdges.add(edge);
+            } catch (JsonProcessingException e) {
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to process relation tags for characters " + dto.getId1() + " and " + dto.getId2());
+            }
+        }
+
+        // 데이터베이스에 저장
+        if (!newEdges.isEmpty()) {
+            eventRelationshipEdgeRepository.saveAll(newEdges);
         }
     }
 }

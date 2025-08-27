@@ -2,21 +2,45 @@ package com.kw.readwith.apiPayload.exception;
 
 import com.kw.readwith.apiPayload.code.BaseErrorCode;
 import com.kw.readwith.apiPayload.code.ErrorReasonDTO;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
-@AllArgsConstructor
 public class GeneralException extends RuntimeException {
 
-    private BaseErrorCode code;
+    private final BaseErrorCode code;
+    private final String overrideMessage;
+
+    public GeneralException(BaseErrorCode code) {
+        this.code = code;
+        this.overrideMessage = null;
+    }
+
+    public GeneralException(BaseErrorCode code, String overrideMessage) {
+        this.code = code;
+        this.overrideMessage = overrideMessage;
+    }
 
     public ErrorReasonDTO getErrorReason() {
-        return this.code.getReason();
+        if (overrideMessage == null) {
+            return this.code.getReason();
+        }
+        return ErrorReasonDTO.builder()
+                .message(this.overrideMessage)
+                .code(this.code.getReason().getCode())
+                .isSuccess(false)
+                .build();
     }
 
     public ErrorReasonDTO getErrorReasonHttpStatus(){
-        return this.code.getReasonHttpStatus();
+        if (overrideMessage == null) {
+            return this.code.getReasonHttpStatus();
+        }
+        return ErrorReasonDTO.builder()
+                .message(this.overrideMessage)
+                .code(this.code.getReasonHttpStatus().getCode())
+                .isSuccess(false)
+                .httpStatus(this.code.getReasonHttpStatus().getHttpStatus())
+                .build();
     }
 
     public BaseErrorCode getErrorCode() {

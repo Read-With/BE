@@ -37,13 +37,13 @@ public class AdminController {
     }
 
     @Operation(summary = "챕터 요약본 업로드 API", description = "특정 챕터에 대한 인물별 요약 정보가 담긴 JSON 파일을 업로드합니다.")
-    @PostMapping(value = "/books/{bookId}/chapters/{idx}/summary", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/books/{bookId}/chapters/{chapterIdx}/summary", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadChapterSummary(
             @Parameter(description = "요약본을 추가할 책의 ID") @PathVariable Long bookId,
-            @Parameter(description = "요약본을 추가할 챕터의 순서(index)") @PathVariable Integer idx,
+            @Parameter(description = "요약본을 추가할 챕터의 순서(index)") @PathVariable Integer chapterIdx,
             @Parameter(description = "인물별 요약 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
 
-        bookService.uploadChapterSummary(bookId, idx, file);
+        bookService.uploadChapterSummary(bookId, chapterIdx, file);
         return ApiResponse.onSuccess("Chapter summary has been successfully uploaded.");
     }
 
@@ -65,5 +65,16 @@ public class AdminController {
             @Parameter(description = "이벤트 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
         adminService.uploadEvents(bookId, chapterIdx, file);
         return ApiResponse.onSuccess("Events uploaded successfully.");
+    }
+
+    @Operation(summary = "관계 정보 업로드 API", description = "특정 이벤트에 대한 인물 관계 정보(JSON)를 업로드합니다.")
+    @PostMapping(value = "/books/{bookId}/chapters/{chapterIdx}/events/{eventIdx}/relationships", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> uploadRelationships(
+            @Parameter(description = "책 ID") @PathVariable Long bookId,
+            @Parameter(description = "챕터 순서(index)") @PathVariable Integer chapterIdx,
+            @Parameter(description = "이벤트 순서(index)") @PathVariable Integer eventIdx,
+            @Parameter(description = "관계 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
+        adminService.uploadRelationships(bookId, chapterIdx, eventIdx, file);
+        return ApiResponse.onSuccess("Relationships uploaded successfully.");
     }
 }
