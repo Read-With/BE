@@ -75,6 +75,15 @@ public class AdminController {
         return ApiResponse.onSuccess("Events uploaded successfully.");
     }
 
+    @Operation(summary = "이벤트 정보 삭제 API", description = "특정 챕터에 대한 모든 이벤트 정보를 삭제합니다. 이벤트 정보 업로드 실패 시 사용합니다.")
+    @DeleteMapping("/books/{bookId}/chapters/{chapterIdx}/events")
+    public ApiResponse<String> deleteEvents(
+            @Parameter(description = "이벤트 정보를 삭제할 책의 ID") @PathVariable Long bookId,
+            @Parameter(description = "이벤트 정보를 삭제할 챕터의 순서(index)") @PathVariable Integer chapterIdx) {
+        bookService.deleteEvents(bookId, chapterIdx);
+        return ApiResponse.onSuccess("Events for the chapter have been successfully deleted.");
+    }
+
     @Operation(summary = "관계 정보 업로드 API", description = "특정 이벤트에 대한 인물 관계 정보(JSON)를 업로드합니다.")
     @PostMapping(value = "/books/{bookId}/chapters/{chapterIdx}/events/{eventIdx}/relationships", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadRelationships(

@@ -17,6 +17,7 @@ import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
 import lombok.Getter;
@@ -45,6 +46,7 @@ public class BookService {
     private final ChapterRepository chapterRepository;
     private final CharacterRepository characterRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
+    private final EventRepository eventRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -283,5 +285,18 @@ public class BookService {
         }
 
         characterRepository.deleteByBook(book);
+    }
+
+    @Transactional
+    public void deleteEvents(Long bookId, Integer chapterIdx) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        // 삭제할 데이터가 존재하는지 먼저 확인
+        if (!eventRepository.existsByChapter(chapter)) {
+            throw new GeneralException(ErrorStatus.NO_EVENTS_TO_DELETE);
+        }
+
+        eventRepository.deleteByChapter(chapter);
     }
 }

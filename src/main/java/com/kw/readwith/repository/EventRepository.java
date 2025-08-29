@@ -4,6 +4,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Event;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 
 import java.util.Optional;
 
@@ -14,4 +15,9 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     // Event를 찾는 메소드
     Optional<Event> findByBookAndChapterAndIdx(Book book, Chapter chapter, Integer idx);
+
+    boolean existsByChapter(Chapter chapter);
+
+    @Modifying
+    void deleteByChapter(Chapter chapter);
 }
