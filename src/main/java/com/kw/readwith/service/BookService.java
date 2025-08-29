@@ -271,4 +271,17 @@ public class BookService {
         List<Book> books = bookRepository.findBySummaryIsFalse();
         return books.stream().map(book -> BookSummaryDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).coverImgUrl(book.getCoverImgUrl()).isDefault(book.isDefault()).isFavorite(false).updatedAt(book.getUpdatedAt()).build()).collect(Collectors.toList());
     }
+
+    @Transactional
+    public void deleteCharacters(Long bookId) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        // 삭제할 데이터가 존재하는지 먼저 확인
+        if (!characterRepository.existsByBook(book)) {
+            throw new GeneralException(ErrorStatus.NO_CHARACTERS_TO_DELETE);
+        }
+
+        characterRepository.deleteByBook(book);
+    }
 }
