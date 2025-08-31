@@ -49,6 +49,7 @@ public enum ErrorStatus implements BaseErrorCode {
     RELATIONSHIP_DATA_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "ADMIN4010", "해당 이벤트의 관계 데이터가 이미 존재합니다."),
     NO_CHARACTERS_TO_DELETE(HttpStatus.BAD_REQUEST, "ADMIN4011", "삭제할 인물 데이터가 존재하지 않습니다."),
     NO_EVENTS_TO_DELETE(HttpStatus.BAD_REQUEST, "ADMIN4012", "삭제할 이벤트 데이터가 존재하지 않습니다."),
+    NO_SUMMARY_TO_DELETE(HttpStatus.BAD_REQUEST, "ADMIN4013", "삭제할 POV 요약본이 존재하지 않습니다."),
 
     // Bookmark
     BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKMARK4001", "해당 북마크를 찾을 수 없습니다."),

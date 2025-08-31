@@ -68,4 +68,13 @@ public class Chapter extends BaseEntity {
     public void setSummaryText(String summaryText) {
         this.summaryText = summaryText;
     }
+
+    public void deleteSummary() {
+        this.summaryText = null;
+        this.summaryUploadUrl = null;
+    }
+
+    public void markPovSummariesAsUncached() {
+        this.povSummariesCached = false;
+    }
 }

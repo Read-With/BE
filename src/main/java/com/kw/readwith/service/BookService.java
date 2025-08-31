@@ -299,4 +299,22 @@ public class BookService {
 
         eventRepository.deleteByChapter(chapter);
     }
+
+    @Transactional
+    public void deleteChapterSummary(Long bookId, Integer chapterIdx) {
+        // 1. 챕터가 존재하는지 확인
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        // 2. POV 요약본이 존재하는지 확인
+        if (!characterPovSummaryRepository.existsByChapter(chapter)) {
+            throw new GeneralException(ErrorStatus.NO_SUMMARY_TO_DELETE);
+        }
+
+        // 3. 해당 챕터의 모든 챕터 요약본을 삭제
+        characterPovSummaryRepository.deleteByChapter(chapter);
+
+        // 4. 해당 챕터의 요약 상태를 업데이트
+        chapter.markPovSummariesAsUncached();
+    }
 }

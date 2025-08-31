@@ -47,6 +47,15 @@ public class AdminController {
         return ApiResponse.onSuccess("Chapter summary has been successfully uploaded.");
     }
 
+    @Operation(summary = "챕터 요약본 삭제 API", description = "특정 챕터에 대한 요약본 정보를 삭제합니다. 요약본 업로드 실패 시 사용합니다.")
+    @DeleteMapping("/books/{bookId}/chapters/{chapterIdx}/summary")
+    public ApiResponse<String> deleteChapterSummary(
+            @Parameter(description = "요약본을 삭제할 책의 ID") @PathVariable Long bookId,
+            @Parameter(description = "요약본을 삭제할 챕터의 순서(index)") @PathVariable Integer chapterIdx) {
+        bookService.deleteChapterSummary(bookId, chapterIdx);
+        return ApiResponse.onSuccess("Chapter summary has been successfully deleted.");
+    }
+
     @Operation(summary = "인물 정보 업로드 API", description = "특정 책에 대한 인물 정보가 담긴 JSON 파일을 업로드합니다.")
     @PostMapping(value = "/books/{bookId}/characters", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadCharacters(
