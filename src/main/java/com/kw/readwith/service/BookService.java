@@ -8,6 +8,7 @@ import com.kw.readwith.aws.s3.AmazonS3Manager;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
+import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
@@ -20,6 +21,7 @@ import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.NoArgsConstructor;
@@ -47,6 +49,7 @@ public class BookService {
     private final CharacterRepository characterRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
     private final EventRepository eventRepository;
+    private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -316,5 +319,20 @@ public class BookService {
 
         // 4. 해당 챕터의 요약 상태를 업데이트
         chapter.markPovSummariesAsUncached();
+    }
+
+    @Transactional
+    public void deleteRelationships(Long bookId, Integer chapterIdx, Integer eventIdx) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
+
+        if (!eventRelationshipEdgeRepository.existsByEvent(event)) {
+            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE);
+        }
+
+        eventRelationshipEdgeRepository.deleteByEvent(event);
     }
 }
