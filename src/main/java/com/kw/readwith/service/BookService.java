@@ -35,6 +35,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -219,47 +222,81 @@ public class BookService {
         private String summary;
     }
 
+    /**
+     * 여러 챕터의 POV 요약 JSON 파일들을 한번에 업로드합니다.
+     * 파일 이름(chapter<번호>_...)에서 챕터 번호를 자동으로 인식하여 처리하며,
+     * 트랜잭션으로 동작하여 하나라도 실패 시 모든 작업이 롤백됩니다.
+     * @param bookId 요약본을 추가할 책의 ID
+     * @param summaryFiles 'chapter<번호>_perspective_summaries.json' 형식의 파일 목록
+     */
     @Transactional
-    public void uploadChapterSummary(Long bookId, Integer chapterIdx, MultipartFile summaryFile) {
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+    public void uploadChapterSummaries(Long bookId, List<MultipartFile> summaryFiles) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
-        // 데이터가 이미 존재하는지 먼저 확인
-        if (characterPovSummaryRepository.existsByChapter(chapter)) {
-            throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED);
+        // 처리된 모든 POV 요약을 모아 DB에 한번에 저장하기 위한 리스트
+        List<CharacterPovSummary> allNewSummaries = new ArrayList<>();
+        // 파일명에서 챕터 번호를 추출하기 위한 정규표현식
+        Pattern pattern = Pattern.compile("chapter(\\d+)_perspective_summaries\\.json");
+
+        for (MultipartFile summaryFile : summaryFiles) {
+            String filename = summaryFile.getOriginalFilename();
+            Matcher matcher = pattern.matcher(filename);
+
+            // 파일 이름 형식 검증
+            if (!matcher.matches()) {
+                throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "파일명: " + filename);
+            }
+
+            Integer chapterIdx = Integer.parseInt(matcher.group(1));
+
+            Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "챕터 인덱스 " + chapterIdx + "를 찾을 수 없습니다."));
+
+            // 이미 요약본이 있는 챕터는 업로드 불가
+            // 예외 발생 시 @Transactional에 의해 지금까지의 모든 작업이 롤백
+            if (characterPovSummaryRepository.existsByChapter(chapter)) {
+                throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED, "챕터 " + chapterIdx + "의 요약본은 이미 존재합니다.");
+            }
+
+            Map<String, PovSummaryData> summaries;
+            try {
+                summaries = objectMapper.readValue(summaryFile.getInputStream(), new TypeReference<>() {});
+            } catch (IOException e) {
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+            }
+
+            List<CharacterPovSummary> newSummariesFromFile = summaries.entrySet().stream().map(entry -> {
+                Long characterId = Long.parseLong(entry.getKey());
+                PovSummaryData summaryData = entry.getValue();
+                Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterId)
+                        .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "Character not found with jsonId: " + characterId));
+
+                return CharacterPovSummary.builder()
+                        .book(chapter.getBook())
+                        .chapter(chapter)
+                        .character(character)
+                        .summaryText(summaryData.getSummary())
+                        .build();
+            }).collect(Collectors.toList());
+
+            allNewSummaries.addAll(newSummariesFromFile);
+
+            chapter.markAsSummarized();
+        }
+        // 모든 파일 처리가 성공하면, 요약본들을 DB에 한번에 저장
+        if (!allNewSummaries.isEmpty()) {
+            characterPovSummaryRepository.saveAll(allNewSummaries);
         }
 
-        Map<String, PovSummaryData> summaries;
-        try {
-            summaries = objectMapper.readValue(summaryFile.getInputStream(), new TypeReference<>() {});
-        } catch (IOException e) {
-            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
-        }
-
-        List<CharacterPovSummary> newSummaries = summaries.entrySet().stream().map(entry -> {
-            Long characterId = Long.parseLong(entry.getKey());
-            PovSummaryData summaryData = entry.getValue();
-            // JSON의 characterId는 book_character 테이블의 character_id 컬럼 값이므로, book과 함께 조회해야 함
-            Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterId)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "Character not found with jsonId: " + characterId));
-
-            return CharacterPovSummary.builder()
-                    .book(chapter.getBook())
-                    .chapter(chapter)
-                    .character(character)
-                    // summaryData.getSummary()를 호출하여 'summary' 값을 가져옴
-                    .summaryText(summaryData.getSummary())
-                    .build();
-        }).collect(Collectors.toList());
-
-        if (!newSummaries.isEmpty()) {
-            characterPovSummaryRepository.saveAll(newSummaries);
-        }
-
-        chapter.markAsSummarized();
-        checkAndUpdateBookSummaryStatus(chapter.getBook());
+        // 책의 전체 요약 상태를 최종적으로 확인하고 업데이트
+        checkAndUpdateBookSummaryStatus(book);
     }
 
+    /**
+     * 책에 속한 모든 챕터의 요약이 완료되었는지 확인하고, 책의 요약 상태를 업데이트합니다.
+     * @param book 상태를 체크할 책 엔터티
+     */
     private void checkAndUpdateBookSummaryStatus(Book book) {
         if (book.isSummary()) {
             return;

@@ -36,15 +36,14 @@ public class AdminController {
         return ApiResponse.onSuccess(response);
     }
 
-    @Operation(summary = "챕터 요약본 업로드 API", description = "특정 챕터에 대한 인물별 요약 정보가 담긴 JSON 파일을 업로드합니다.")
-    @PostMapping(value = "/books/{bookId}/chapters/{chapterIdx}/summary", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<String> uploadChapterSummary(
+    @Operation(summary = "챕터 요약본 업로드 API", description = "특정 책에 대한 챕터별 요약 정보가 담긴 JSON 파일들을 업로드합니다. 파일 이름에서 챕터 번호를 자동 인식합니다.")
+    @PostMapping(value = "/books/{bookId}/summary", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> uploadChapterSummaries(
             @Parameter(description = "요약본을 추가할 책의 ID") @PathVariable Long bookId,
-            @Parameter(description = "요약본을 추가할 챕터의 순서(index)") @PathVariable Integer chapterIdx,
-            @Parameter(description = "인물별 요약 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
+            @Parameter(description = "인물별 요약 정보가 담긴 JSON 파일 목록 (파일명: chapter<번호>_perspective_summaries.json)") @RequestParam("files") List<MultipartFile> files) {
 
-        bookService.uploadChapterSummary(bookId, chapterIdx, file);
-        return ApiResponse.onSuccess("Chapter summary has been successfully uploaded.");
+        bookService.uploadChapterSummaries(bookId, files);
+        return ApiResponse.onSuccess("Chapter summaries have been successfully uploaded.");
     }
 
     @Operation(summary = "챕터 요약본 삭제 API", description = "특정 챕터에 대한 요약본 정보를 삭제합니다. 요약본 업로드 실패 시 사용합니다.")
