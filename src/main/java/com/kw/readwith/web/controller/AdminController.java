@@ -36,7 +36,7 @@ public class AdminController {
         return ApiResponse.onSuccess(response);
     }
 
-    @Operation(summary = "챕터 요약본 업로드 API", description = "특정 책에 대한 챕터별 요약 정보가 담긴 JSON 파일들을 업로드합니다. 파일 이름에서 챕터 번호를 자동 인식합니다.")
+    @Operation(summary = "챕터 요약본 다중 업로드 API", description = "특정 책에 대한 챕터별 요약 정보가 담긴 JSON 파일들을 업로드합니다. 파일 이름에서 챕터 번호를 자동 인식합니다.")
     @PostMapping(value = "/books/{bookId}/summary", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadChapterSummaries(
             @Parameter(description = "요약본을 추가할 책의 ID") @PathVariable Long bookId,
@@ -73,14 +73,15 @@ public class AdminController {
         return ApiResponse.onSuccess("Characters for the book have been successfully deleted.");
     }
 
-    @Operation(summary = "이벤트 정보 업로드 API", description = "책의 특정 챕터에 대한 이벤트 정보(JSON)를 업로드합니다.")
-    @PostMapping(value = "/books/{bookId}/chapters/{chapterIdx}/events", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    // 기존의 단일 이벤트 업로드 API를 다중 업로드 API로 수정
+    @Operation(summary = "이벤트 정보 다중 업로드 API", description = "특정 책에 대한 챕터별 이벤트 정보가 담긴 JSON 파일들을 업로드합니다. 파일 이름에서 챕터 번호를 자동 인식합니다.")
+    @PostMapping(value = "/books/{bookId}/events", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadEvents(
-            @Parameter(description = "이벤트 정보를 추가할 책의 ID") @PathVariable(name = "bookId") Long bookId,
-            @Parameter(description = "이벤트 정보를 추가할 챕터의 순서(index)") @PathVariable(name = "chapterIdx") Integer chapterIdx,
-            @Parameter(description = "이벤트 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
-        adminService.uploadEvents(bookId, chapterIdx, file);
-        return ApiResponse.onSuccess("Events uploaded successfully.");
+            @Parameter(description = "이벤트를 추가할 책의 ID") @PathVariable Long bookId,
+            @Parameter(description = "챕터별 이벤트 정보가 담긴 JSON 파일 목록 (파일명: chapter<번호>_events.json)") @RequestParam("files") List<MultipartFile> files) {
+
+        adminService.uploadEvents(bookId, files);
+        return ApiResponse.onSuccess("Events have been successfully uploaded.");
     }
 
     @Operation(summary = "이벤트 정보 삭제 API", description = "특정 챕터에 대한 모든 이벤트 정보를 삭제합니다. 이벤트 정보 업로드 실패 시 사용합니다.")

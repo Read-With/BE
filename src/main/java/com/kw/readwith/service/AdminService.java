@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -80,48 +82,68 @@ public class AdminService {
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void uploadEvents(Long bookId, Integer chapterIdx, MultipartFile file) {
+    /**
+     * 여러 챕터의 이벤트 JSON 파일들을 한번에 업로드합니다.
+     * 파일 이름(chapter<번호>_events.json)에서 챕터 번호를 자동으로 인식하여 처리하며,
+     * 트랜잭션으로 동작하여 하나라도 실패 시 모든 작업이 롤백됩니다.
+     * @param bookId 이벤트를 추가할 책의 ID
+     * @param eventFiles 'chapter<번호>_events.json' 형식의 파일 목록
+     */
+    @Transactional
+    public void uploadEvents(Long bookId, List<MultipartFile> eventFiles) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
-        // Repository의 기존 메소드에 맞게 book.getId()와 chapterIdx를 전달
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), chapterIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        // DB에 한번에 저장하기 위해 모든 이벤트를 담을 리스트
+        List<Event> allNewEvents = new ArrayList<>();
+        // 파일명에서 챕터 번호를 추출하기 위한 정규표현식
+        Pattern pattern = Pattern.compile("chapter(\\d+)_events\\.json");
 
-        // 해당 책에 속한 챕터가 맞는지 확인
-        if (!chapter.getBook().getId().equals(book.getId())) {
-            throw new GeneralException(ErrorStatus.CHAPTER_NOT_BELONG_TO_BOOK);
-        }
+        for (MultipartFile eventFile : eventFiles) {
+            String filename = eventFile.getOriginalFilename();
+            Matcher matcher = pattern.matcher(filename);
 
-        // Book과 Chapter를 함께 사용하여 데이터가 이미 존재하는지 확인
-        if (eventRepository.existsByBookAndChapter(book, chapter)) {
-            throw new GeneralException(ErrorStatus.EVENT_DATA_ALREADY_EXISTS);
-        }
-
-        try {
-            // JSON 파일을 DTO 리스트로 파싱
-            List<EventDTO> eventDTOs = objectMapper.readValue(file.getInputStream(), new TypeReference<List<EventDTO>>() {});
-
-            // DTO를 Entity로 변환
-            List<Event> newEvents = eventDTOs.stream()
-                    .map(dto -> Event.builder()
-                            .startPos(dto.getStart())
-                            .endPos(dto.getEnd())
-                            .rawText(dto.getText())
-                            .idx(dto.getEventId())
-                            .chapter(chapter)
-                            .book(book)
-                            .build())
-                    .collect(Collectors.toList());
-
-            // 데이터베이스에 저장
-            if (!newEvents.isEmpty()) {
-                eventRepository.saveAllAndFlush(newEvents);
+            if (!matcher.matches()) {
+                throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "파일명: " + filename);
             }
 
-        } catch (IOException e) {
-            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+            // 파일명에서 챕터 번호 추출 및 해당 챕터 조회
+            Integer chapterIdx = Integer.parseInt(matcher.group(1));
+            Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "챕터 인덱스 " + chapterIdx + "를 찾을 수 없습니다."));
+
+            // 이미 이벤트가 있는 챕터는 업로드 불가
+            if (eventRepository.existsByChapter(chapter)) {
+                throw new GeneralException(ErrorStatus.EVENT_DATA_ALREADY_EXISTS, "챕터 " + chapterIdx + "의 이벤트는 이미 존재합니다.");
+            }
+
+            try {
+                // JSON 파일을 DTO 리스트로 파싱
+                List<EventDTO> eventDTOs = objectMapper.readValue(eventFile.getInputStream(), new TypeReference<List<EventDTO>>() {});
+
+                // DTO 리스트를 Entity로 변환
+                List<Event> newEventsFromFile = eventDTOs.stream()
+                        .map(dto -> Event.builder()
+                                .book(book)
+                                .chapter(chapter)
+                                .idx(dto.getEventId())
+                                .startPos(dto.getStart())
+                                .endPos(dto.getEnd())
+                                .rawText(dto.getText())
+                                .build())
+                        .collect(Collectors.toList());
+
+                allNewEvents.addAll(newEventsFromFile);
+
+            } catch (IOException e) {
+                // 파일 입출력 또는 JSON 형식 오류 시 예외 발생
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+            }
+        }
+
+        // 모든 파일 처리가 성공하면, 수집된 모든 이벤트를 DB에 한번에 저장
+        if (!allNewEvents.isEmpty()) {
+            eventRepository.saveAll(allNewEvents);
         }
     }
 
