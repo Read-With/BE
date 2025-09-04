@@ -8,6 +8,7 @@ import com.kw.readwith.aws.s3.AmazonS3Manager;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
+import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
@@ -17,8 +18,10 @@ import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.NoArgsConstructor;
@@ -45,6 +48,8 @@ public class BookService {
     private final ChapterRepository chapterRepository;
     private final CharacterRepository characterRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
+    private final EventRepository eventRepository;
+    private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -216,30 +221,41 @@ public class BookService {
 
     @Transactional
     public void uploadChapterSummary(Long bookId, Integer chapterIdx, MultipartFile summaryFile) {
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx).orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
-        if (chapter.isPovSummariesCached()) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        // 데이터가 이미 존재하는지 먼저 확인
+        if (characterPovSummaryRepository.existsByChapter(chapter)) {
             throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED);
         }
+
         Map<String, PovSummaryData> summaries;
         try {
             summaries = objectMapper.readValue(summaryFile.getInputStream(), new TypeReference<>() {});
         } catch (IOException e) {
             throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
         }
-        for (Map.Entry<String, PovSummaryData> entry : summaries.entrySet()) {
+
+        List<CharacterPovSummary> newSummaries = summaries.entrySet().stream().map(entry -> {
             Long characterId = Long.parseLong(entry.getKey());
             PovSummaryData summaryData = entry.getValue();
-            Character character = characterRepository.findById(characterId).orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND));
+            // JSON의 characterId는 book_character 테이블의 character_id 컬럼 값이므로, book과 함께 조회해야 함
+            Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "Character not found with jsonId: " + characterId));
 
-            CharacterPovSummary povSummary = CharacterPovSummary.builder()
+            return CharacterPovSummary.builder()
                     .book(chapter.getBook())
                     .chapter(chapter)
                     .character(character)
                     // summaryData.getSummary()를 호출하여 'summary' 값을 가져옴
                     .summaryText(summaryData.getSummary())
                     .build();
-            characterPovSummaryRepository.save(povSummary);
+        }).collect(Collectors.toList());
+
+        if (!newSummaries.isEmpty()) {
+            characterPovSummaryRepository.saveAll(newSummaries);
         }
+
         chapter.markAsSummarized();
         checkAndUpdateBookSummaryStatus(chapter.getBook());
     }
@@ -259,5 +275,64 @@ public class BookService {
     public List<BookSummaryDTO> getUnsummarizedBooks() {
         List<Book> books = bookRepository.findBySummaryIsFalse();
         return books.stream().map(book -> BookSummaryDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).coverImgUrl(book.getCoverImgUrl()).isDefault(book.isDefault()).isFavorite(false).updatedAt(book.getUpdatedAt()).build()).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void deleteCharacters(Long bookId) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        // 삭제할 데이터가 존재하는지 먼저 확인
+        if (!characterRepository.existsByBook(book)) {
+            throw new GeneralException(ErrorStatus.NO_CHARACTERS_TO_DELETE);
+        }
+
+        characterRepository.deleteByBook(book);
+    }
+
+    @Transactional
+    public void deleteEvents(Long bookId, Integer chapterIdx) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        // 삭제할 데이터가 존재하는지 먼저 확인
+        if (!eventRepository.existsByChapter(chapter)) {
+            throw new GeneralException(ErrorStatus.NO_EVENTS_TO_DELETE);
+        }
+
+        eventRepository.deleteByChapter(chapter);
+    }
+
+    @Transactional
+    public void deleteChapterSummary(Long bookId, Integer chapterIdx) {
+        // 1. 챕터가 존재하는지 확인
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        // 2. POV 요약본이 존재하는지 확인
+        if (!characterPovSummaryRepository.existsByChapter(chapter)) {
+            throw new GeneralException(ErrorStatus.NO_SUMMARY_TO_DELETE);
+        }
+
+        // 3. 해당 챕터의 모든 챕터 요약본을 삭제
+        characterPovSummaryRepository.deleteByChapter(chapter);
+
+        // 4. 해당 챕터의 요약 상태를 업데이트
+        chapter.markPovSummariesAsUncached();
+    }
+
+    @Transactional
+    public void deleteRelationships(Long bookId, Integer chapterIdx, Integer eventIdx) {
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+
+        Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
+
+        if (!eventRelationshipEdgeRepository.existsByEvent(event)) {
+            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE);
+        }
+
+        eventRelationshipEdgeRepository.deleteByEvent(event);
     }
 }
