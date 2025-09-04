@@ -13,4 +13,8 @@ public interface EventRelationshipEdgeRepository extends JpaRepository<EventRela
      * 특정 이벤트의 모든 관계 엣지 조회 (세밀 그래프용)
      */
     List<EventRelationshipEdge> findByEvent(Event event);
+    
+    /**
+     *  충돌 해결
+     * */
 }
