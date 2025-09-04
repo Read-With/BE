@@ -6,22 +6,12 @@ import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.aws.s3.AmazonS3Manager;
 import com.kw.readwith.domain.Book;
-import com.kw.readwith.domain.Chapter;
-import com.kw.readwith.domain.Character;
-import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
-import com.kw.readwith.domain.mapping.CharacterPovSummary;
-import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
-import com.kw.readwith.repository.ChapterRepository;
-import com.kw.readwith.repository.CharacterPovSummaryRepository;
-import com.kw.readwith.repository.CharacterRepository;
-import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
-import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.NoArgsConstructor;
@@ -35,9 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.ArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -48,12 +35,6 @@ public class BookService {
     private final FavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
     private final AmazonS3Manager amazonS3Manager;
-    private final ChapterRepository chapterRepository;
-    private final CharacterRepository characterRepository;
-    private final CharacterPovSummaryRepository characterPovSummaryRepository;
-    private final EventRepository eventRepository;
-    private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
-    private final ObjectMapper objectMapper;
 
     /**
      * 도서 목록 조회 (검색/필터/정렬/즐겨찾기)
@@ -197,179 +178,5 @@ public class BookService {
                 .isFavorite(isFavorite)
                 .summary(book.isSummary())
                 .build();
-    }
-    @Transactional
-    public BookDetailDTO uploadBookSummary(Long bookId, MultipartFile summaryFile) {
-        Book book = bookRepository.findById(bookId).orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-        if (book.isSummary()) {
-            throw new GeneralException(ErrorStatus.BOOK_ALREADY_SUMMARIZED);
-        }
-        String summaryUrl = "https://s3-dummy-url.com/summaries/books/" + summaryFile.getOriginalFilename();
-        book.updateSummary(summaryUrl);
-        return convertToDetailDTO(book, false);
-    }
-
-    public List<UnsummarizedItemDTO> getUnsummarizedChapters() {
-        return chapterRepository.findUnsummarizedChapters().stream().map(UnsummarizedItemDTO::from).collect(Collectors.toList());
-    }
-
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    private static class PovSummaryData {
-        private String character_name;
-        // JSON의 'summary' 키와 정확히 일치시킴
-        private String summary;
-    }
-
-    /**
-     * 여러 챕터의 POV 요약 JSON 파일들을 한번에 업로드합니다.
-     * 파일 이름(chapter<번호>_...)에서 챕터 번호를 자동으로 인식하여 처리하며,
-     * 트랜잭션으로 동작하여 하나라도 실패 시 모든 작업이 롤백됩니다.
-     * @param bookId 요약본을 추가할 책의 ID
-     * @param summaryFiles 'chapter<번호>_perspective_summaries.json' 형식의 파일 목록
-     */
-    @Transactional
-    public void uploadChapterSummaries(Long bookId, List<MultipartFile> summaryFiles) {
-        Book book = bookRepository.findById(bookId)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-
-        // 처리된 모든 POV 요약을 모아 DB에 한번에 저장하기 위한 리스트
-        List<CharacterPovSummary> allNewSummaries = new ArrayList<>();
-        // 파일명에서 챕터 번호를 추출하기 위한 정규표현식
-        Pattern pattern = Pattern.compile("chapter(\\d+)_perspective_summaries\\.json");
-
-        for (MultipartFile summaryFile : summaryFiles) {
-            String filename = summaryFile.getOriginalFilename();
-            Matcher matcher = pattern.matcher(filename);
-
-            // 파일 이름 형식 검증
-            if (!matcher.matches()) {
-                throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "파일명: " + filename);
-            }
-
-            Integer chapterIdx = Integer.parseInt(matcher.group(1));
-
-            Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "챕터 인덱스 " + chapterIdx + "를 찾을 수 없습니다."));
-
-            // 이미 요약본이 있는 챕터는 업로드 불가
-            // 예외 발생 시 @Transactional에 의해 지금까지의 모든 작업이 롤백
-            if (characterPovSummaryRepository.existsByChapter(chapter)) {
-                throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED, "챕터 " + chapterIdx + "의 요약본은 이미 존재합니다.");
-            }
-
-            Map<String, PovSummaryData> summaries;
-            try {
-                summaries = objectMapper.readValue(summaryFile.getInputStream(), new TypeReference<>() {});
-            } catch (IOException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
-            }
-
-            List<CharacterPovSummary> newSummariesFromFile = summaries.entrySet().stream().map(entry -> {
-                Long characterId = Long.parseLong(entry.getKey());
-                PovSummaryData summaryData = entry.getValue();
-                Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterId)
-                        .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "Character not found with jsonId: " + characterId));
-
-                return CharacterPovSummary.builder()
-                        .book(chapter.getBook())
-                        .chapter(chapter)
-                        .character(character)
-                        .summaryText(summaryData.getSummary())
-                        .build();
-            }).collect(Collectors.toList());
-
-            allNewSummaries.addAll(newSummariesFromFile);
-
-            chapter.markAsSummarized();
-        }
-        // 모든 파일 처리가 성공하면, 요약본들을 DB에 한번에 저장
-        if (!allNewSummaries.isEmpty()) {
-            characterPovSummaryRepository.saveAll(allNewSummaries);
-        }
-
-        // 책의 전체 요약 상태를 최종적으로 확인하고 업데이트
-        checkAndUpdateBookSummaryStatus(book);
-    }
-
-    /**
-     * 책에 속한 모든 챕터의 요약이 완료되었는지 확인하고, 책의 요약 상태를 업데이트합니다.
-     * @param book 상태를 체크할 책 엔터티
-     */
-    private void checkAndUpdateBookSummaryStatus(Book book) {
-        if (book.isSummary()) {
-            return;
-        }
-        List<Chapter> chapters = chapterRepository.findByBookId(book.getId());
-        boolean allChaptersSummarized = chapters.stream().allMatch(Chapter::isPovSummariesCached);
-        if (allChaptersSummarized) {
-            book.completeSummary();
-        }
-    }
-
-    @Transactional(readOnly = true)
-    public List<BookSummaryDTO> getUnsummarizedBooks() {
-        List<Book> books = bookRepository.findBySummaryIsFalse();
-        return books.stream().map(book -> BookSummaryDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).coverImgUrl(book.getCoverImgUrl()).isDefault(book.isDefault()).isFavorite(false).updatedAt(book.getUpdatedAt()).build()).collect(Collectors.toList());
-    }
-
-    @Transactional
-    public void deleteCharacters(Long bookId) {
-        Book book = bookRepository.findById(bookId)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-
-        // 삭제할 데이터가 존재하는지 먼저 확인
-        if (!characterRepository.existsByBook(book)) {
-            throw new GeneralException(ErrorStatus.NO_CHARACTERS_TO_DELETE);
-        }
-
-        characterRepository.deleteByBook(book);
-    }
-
-    @Transactional
-    public void deleteEvents(Long bookId, Integer chapterIdx) {
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
-
-        // 삭제할 데이터가 존재하는지 먼저 확인
-        if (!eventRepository.existsByChapter(chapter)) {
-            throw new GeneralException(ErrorStatus.NO_EVENTS_TO_DELETE);
-        }
-
-        eventRepository.deleteByChapter(chapter);
-    }
-
-    @Transactional
-    public void deleteChapterSummary(Long bookId, Integer chapterIdx) {
-        // 1. 챕터가 존재하는지 확인
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
-
-        // 2. POV 요약본이 존재하는지 확인
-        if (!characterPovSummaryRepository.existsByChapter(chapter)) {
-            throw new GeneralException(ErrorStatus.NO_SUMMARY_TO_DELETE);
-        }
-
-        // 3. 해당 챕터의 모든 챕터 요약본을 삭제
-        characterPovSummaryRepository.deleteByChapter(chapter);
-
-        // 4. 해당 챕터의 요약 상태를 업데이트
-        chapter.markPovSummariesAsUncached();
-    }
-
-    @Transactional
-    public void deleteRelationships(Long bookId, Integer chapterIdx, Integer eventIdx) {
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
-
-        Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
-
-        if (!eventRelationshipEdgeRepository.existsByEvent(event)) {
-            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE);
-        }
-
-        eventRelationshipEdgeRepository.deleteByEvent(event);
     }
 }
