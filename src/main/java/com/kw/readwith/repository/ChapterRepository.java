@@ -12,7 +12,8 @@ import java.util.Optional;
 @Repository
 public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
-    @Query("SELECT c FROM Chapter c WHERE c.povSummariesCached = false AND c.summaryUploadUrl IS NOT NULL")
+    // POV 요약이 완료되지 않은 모든 챕터를 조회
+    @Query("SELECT c FROM Chapter c WHERE c.povSummariesCached = false")
     List<Chapter> findUnsummarizedChapters();
 
     // bookId와 chapterIdx로 확인
