@@ -5,12 +5,16 @@ import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
+import com.kw.readwith.domain.mapping.EventRelationshipEdge;
+import com.kw.readwith.domain.mapping.ChapterRelationshipEdge;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.repository.EventRelationshipEdgeRepository;
+import com.kw.readwith.repository.ChapterRelationshipEdgeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -25,6 +29,8 @@ public class DataLoader implements CommandLineRunner {
     private final ChapterRepository chapterRepository;
     private final EventRepository eventRepository;
     private final CharacterRepository characterRepository;
+    private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
+    private final ChapterRelationshipEdgeRepository chapterRelationshipEdgeRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -251,7 +257,10 @@ public class DataLoader implements CommandLineRunner {
                 .endPos(5000)
                 .rawText("덤블도어가 나타나서 해그리드와 함께 아기 해리를 더즐리 가족에게 맡겼다...")
                 .build();
-        eventRepository.save(event3);
+        Event savedEvent3 = eventRepository.save(event3);
+        
+        // EventRelationshipEdge 관계 데이터 추가 (Admin API 업로드 형태와 동일)
+        createHarryPotterRelationships(book, savedEvent3, harry, hermione, ron, hagrid);
     }
 
     /**
@@ -344,5 +353,116 @@ public class DataLoader implements CommandLineRunner {
                 .rawText("파티가 끝난 후, 빌보는 반지를 끼고 사라져버렸다...")
                 .build();
         eventRepository.save(event2);
+        
+        // 반지의 제왕 관계 데이터 추가
+        createLordOfTheRingsRelationships(book, event2, frodo, gandalf, aragorn);
+    }
+
+    /**
+     * 해리포터 관계 데이터 생성 (Admin API 업로드 형태와 동일)
+     */
+    private void createHarryPotterRelationships(Book book, Event event, Character harry, Character hermione, Character ron, Character hagrid) {
+        // 해리 - 해그리드 관계 (긍정적)
+        EventRelationshipEdge harryHagrid = EventRelationshipEdge.builder()
+                .fromCharacter(harry)
+                .toCharacter(hagrid)
+                .event(event)
+                .edgeWeight(3.5f)  // Admin API의 weight 필드
+                .sentimentScore(0.8f)  // Admin API의 positivity 필드
+                .interactionCount(2)  // Admin API의 count 필드
+                .relationTags("[\"care\", \"protection\"]")  // Admin API의 relation 필드 (JSON 문자열)
+                .build();
+        eventRelationshipEdgeRepository.save(harryHagrid);
+
+        // 해그리드 - 해리 관계 (상호)
+        EventRelationshipEdge hagridHarry = EventRelationshipEdge.builder()
+                .fromCharacter(hagrid)
+                .toCharacter(harry)
+                .event(event)
+                .edgeWeight(3.5f)
+                .sentimentScore(0.7f)
+                .interactionCount(2)
+                .relationTags("[\"mentorship\", \"guidance\"]")
+                .build();
+        eventRelationshipEdgeRepository.save(hagridHarry);
+
+        // ChapterRelationshipEdge 누적 데이터 생성 (챕터 1 기준)
+        ChapterRelationshipEdge chapterEdge1 = ChapterRelationshipEdge.builder()
+                .book(book)
+                .chapterIdx(1)
+                .fromCharacter(harry)
+                .toCharacter(hagrid)
+                .cumulativeInteraction(2)
+                .sentimentWeightedSum(1.6f)  // 0.8 * 2
+                .edgeColorHex("#4CAF50")  // 긍정적 관계 - 녹색
+                .edgeWidth(2.5f)
+                .build();
+        chapterRelationshipEdgeRepository.save(chapterEdge1);
+
+        ChapterRelationshipEdge chapterEdge2 = ChapterRelationshipEdge.builder()
+                .book(book)
+                .chapterIdx(1)
+                .fromCharacter(hagrid)
+                .toCharacter(harry)
+                .cumulativeInteraction(2)
+                .sentimentWeightedSum(1.4f)  // 0.7 * 2
+                .edgeColorHex("#4CAF50")
+                .edgeWidth(2.5f)
+                .build();
+        chapterRelationshipEdgeRepository.save(chapterEdge2);
+    }
+
+    /**
+     * 반지의 제왕 관계 데이터 생성
+     */
+    private void createLordOfTheRingsRelationships(Book book, Event event, Character frodo, Character gandalf, Character aragorn) {
+        // 프로도 - 간달프 관계 (신뢰)
+        EventRelationshipEdge frodoGandalf = EventRelationshipEdge.builder()
+                .fromCharacter(frodo)
+                .toCharacter(gandalf)
+                .event(event)
+                .edgeWeight(4.0f)
+                .sentimentScore(0.9f)
+                .interactionCount(3)
+                .relationTags("[\"trust\", \"guidance\", \"friendship\"]")
+                .build();
+        eventRelationshipEdgeRepository.save(frodoGandalf);
+
+        // 간달프 - 프로도 관계 (보호)
+        EventRelationshipEdge gandalfFrodo = EventRelationshipEdge.builder()
+                .fromCharacter(gandalf)
+                .toCharacter(frodo)
+                .event(event)
+                .edgeWeight(4.2f)
+                .sentimentScore(0.85f)
+                .interactionCount(3)
+                .relationTags("[\"protection\", \"mentorship\"]")
+                .build();
+        eventRelationshipEdgeRepository.save(gandalfFrodo);
+
+        // ChapterRelationshipEdge 누적 데이터
+        ChapterRelationshipEdge chapterEdge1 = ChapterRelationshipEdge.builder()
+                .book(book)
+                .chapterIdx(1)
+                .fromCharacter(frodo)
+                .toCharacter(gandalf)
+                .cumulativeInteraction(3)
+                .sentimentWeightedSum(2.7f)  // 0.9 * 3
+                .edgeColorHex("#2196F3")  // 신뢰 관계 - 파란색
+                .edgeWidth(3.0f)
+                .build();
+        chapterRelationshipEdgeRepository.save(chapterEdge1);
+
+        ChapterRelationshipEdge chapterEdge2 = ChapterRelationshipEdge.builder()
+                .book(book)
+                .chapterIdx(1)
+                .fromCharacter(gandalf)
+                .toCharacter(frodo)
+                .cumulativeInteraction(3)
+                .sentimentWeightedSum(2.55f)  // 0.85 * 3
+                .edgeColorHex("#2196F3")
+                .edgeWidth(3.0f)
+                .build();
+        chapterRelationshipEdgeRepository.save(chapterEdge2);
     }
 } 
