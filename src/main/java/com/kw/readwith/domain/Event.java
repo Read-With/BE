@@ -4,7 +4,8 @@ import com.kw.readwith.domain.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Entity(name = "book_event")
+@Entity
+@Table(name = "book_event")
 @Getter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
