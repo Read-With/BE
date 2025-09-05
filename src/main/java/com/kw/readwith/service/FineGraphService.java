@@ -103,7 +103,8 @@ public class FineGraphService {
         return FineGraphEdgeDTO.builder()
                 .from(edge.getFromCharacter().getId())
                 .to(edge.getToCharacter().getId())
-                .weight(edge.getEdgeWeight() != null ? edge.getEdgeWeight().doubleValue() : 0.0)
+                // TODO: 관계 JSON에서 edge_weight 필드는 제거됨
+                // .weight(edge.getEdgeWeight() != null ? edge.getEdgeWeight().doubleValue() : 0.0)
                 .sentimentScore(edge.getSentimentScore() != null ? edge.getSentimentScore().doubleValue() : 0.0)
                 .interactionCount(edge.getInteractionCount())
                 .relationTags(relationTags)

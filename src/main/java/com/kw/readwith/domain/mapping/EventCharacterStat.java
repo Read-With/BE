@@ -1,4 +1,4 @@
-package com.kw.readwith.domain.cache;
+package com.kw.readwith.domain.mapping;
 
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
@@ -23,5 +23,10 @@ public class EventCharacterStat extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(nullable = false)
     private Character character;
 
-    private int mentionCount;
+    @Column(name = "node_weight")
+    private double nodeWeight;
+
+    public void updateNodeWeight(double nodeWeight) {
+        this.nodeWeight = nodeWeight;
+    }
 }

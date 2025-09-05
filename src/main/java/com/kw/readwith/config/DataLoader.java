@@ -367,9 +367,7 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(harry)
                 .toCharacter(hagrid)
                 .event(event)
-                .edgeWeight(3.5f)  // Admin API의 weight 필드
                 .sentimentScore(0.8f)  // Admin API의 positivity 필드
-                .interactionCount(2)  // Admin API의 count 필드
                 .relationTags("[\"care\", \"protection\"]")  // Admin API의 relation 필드 (JSON 문자열)
                 .build();
         eventRelationshipEdgeRepository.save(harryHagrid);
@@ -379,9 +377,7 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(hagrid)
                 .toCharacter(harry)
                 .event(event)
-                .edgeWeight(3.5f)
                 .sentimentScore(0.7f)
-                .interactionCount(2)
                 .relationTags("[\"mentorship\", \"guidance\"]")
                 .build();
         eventRelationshipEdgeRepository.save(hagridHarry);
@@ -421,9 +417,7 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(frodo)
                 .toCharacter(gandalf)
                 .event(event)
-                .edgeWeight(4.0f)
                 .sentimentScore(0.9f)
-                .interactionCount(3)
                 .relationTags("[\"trust\", \"guidance\", \"friendship\"]")
                 .build();
         eventRelationshipEdgeRepository.save(frodoGandalf);
@@ -433,9 +427,7 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(gandalf)
                 .toCharacter(frodo)
                 .event(event)
-                .edgeWeight(4.2f)
                 .sentimentScore(0.85f)
-                .interactionCount(3)
                 .relationTags("[\"protection\", \"mentorship\"]")
                 .build();
         eventRelationshipEdgeRepository.save(gandalfFrodo);

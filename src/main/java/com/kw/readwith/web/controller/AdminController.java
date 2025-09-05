@@ -55,15 +55,13 @@ public class AdminController {
         return ApiResponse.onSuccess("Events for the chapter have been successfully deleted.");
     }
 
-    @Operation(summary = "관계 정보 업로드 API", description = "특정 이벤트에 대한 인물 관계 정보(JSON)를 업로드합니다.")
-    @PostMapping(value = "/books/{bookId}/chapters/{chapterIdx}/events/{eventIdx}/relationships", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "관계 정보 다중 업로드 API", description = "특정 책에 대한 관계 정보(JSON) 파일들을 업로드합니다. 파일명 규칙: chapter<번호>_relationships_<언어>_event_<번호>.json")
+    @PostMapping(value = "/books/{bookId}/relationships", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadRelationships(
             @Parameter(description = "관계 정보를 추가할 책의 ID") @PathVariable Long bookId,
-            @Parameter(description = "관계 정보를 추가할 챕터의 순서(index)") @PathVariable Integer chapterIdx,
-            @Parameter(description = "관계 정보를 추가할 이벤트의 순서(index)") @PathVariable Integer eventIdx,
-            @Parameter(description = "관계 정보가 담긴 JSON 파일") @RequestParam("file") MultipartFile file) {
-        adminService.uploadRelationships(bookId, chapterIdx, eventIdx, file);
-        return ApiResponse.onSuccess("Relationships uploaded successfully.");
+            @Parameter(description = "관계 정보가 담긴 JSON 파일 목록") @RequestParam("files") List<MultipartFile> files) {
+        adminService.uploadRelationships(bookId, files);
+        return ApiResponse.onSuccess("Relationships for the book have been successfully uploaded.");
     }
 
     @Operation(summary = "관계 정보 삭제 API", description = "특정 이벤트에 대한 모든 관계 정보(엣지)를 삭제합니다.")

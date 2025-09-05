@@ -1,7 +1,7 @@
 package com.kw.readwith.domain;
 
 import com.kw.readwith.domain.cache.ChapterCharacterStat;
-import com.kw.readwith.domain.cache.EventCharacterStat;
+import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
