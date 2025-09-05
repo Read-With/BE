@@ -53,7 +53,7 @@ public class AdminService {
     private final EventCharacterStatRepository statRepository; // 의존성 추가
     private final ObjectMapper objectMapper;
 
-    // 파일명에서 챕터와 이벤트 인덱스를 추출하기 위한 정규식 패턴 (새로 추가)
+    // 파일명에서 챕터와 이벤트 인덱스를 추출하기 위한 정규표현식 패턴 (새로 추가)
     private static final Pattern RELATIONSHIP_FILE_PATTERN = Pattern.compile("chapter(\\d+)_.*?_event_(\\d+)\\.json");
 
     /*
@@ -218,130 +218,130 @@ public class AdminService {
 
     /**
      * 여러 관계 JSON 파일을 업로드하고 DB에 저장
-     * 파일 이름 규칙(chapter<번호>_..._event_<번호>.json)을 기반으로
-     * 자동으로 챕터와 이벤트를 매핑하여 관계 데이터를 저장합니다.
+     * 파일 이름 규칙: chapter<번호>_..._event_<번호>.json
      *
      * @param bookId 관계 정보를 추가할 책의 ID
      * @param files  업로드할 관계 정보 JSON 파일 목록
      */
     @Transactional
     public void uploadRelationships(Long bookId, List<MultipartFile> files) {
-        // 입력된 bookId로 Book 엔터티를 조회합니다. 없으면 예외를 발생시킴
+        // 입력된 bookId로 Book 엔터티를 조회
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         // 업로드된 각 파일에 대해 반복 처리를 시작
         for (MultipartFile file : files) {
             String filename = file.getOriginalFilename();
-            // 파일명에서 챕터 번호와 이벤트 번호를 추출하기 위해 정규식 매칭을 시도
+            // 파일명 규칙을 기반으로 챕터와 이벤트 인덱스 추출
             Matcher matcher = RELATIONSHIP_FILE_PATTERN.matcher(filename);
 
-            // 파일명이 지정된 패턴과 일치하지 않으면, 예외를 발생시켜 작업을 중단
             if (!matcher.find()) {
                 throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "파일명 형식이 올바르지 않습니다: " + filename);
             }
 
-            // 정규식 그룹에서 챕터 번호(group 1)와 이벤트 번호(group 2)를 추출
+            // 정규표현식 그룹에서 챕터와 이벤트 인덱스 추출
             int chapterIdx = Integer.parseInt(matcher.group(1));
             int eventIdx = Integer.parseInt(matcher.group(2));
 
-            // 추출된 ID들을 사용하여 정확한 Event 엔터티를 조회합니다. 없으면 예외를 발생시킴
+            // 파일명에서 얻은 정보로 Event 엔터티를 DB에서 조회
             Event event = eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)
                     .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND,
-                            String.format("Event not found for bookId=%d, chapterIdx=%d, eventIdx=%d", bookId, chapterIdx, eventIdx)));
+                            String.format("이벤트를 찾을 수 없습니다 (책 ID: %d, 챕터: %d, 이벤트: %d)", bookId, chapterIdx, eventIdx)));
 
             try {
-                // JSON 파일의 내용을 RelationshipUploadDTO 객체로 변환
+                // JSON 파일을 DTO 객체로 변환
                 RelationshipUploadDTO dto = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
 
-                // 'node_weights_accum' 데이터를 처리하여 EventCharacterStat 테이블에 저장
+                // DTO의 각 부분을 처리하는 헬퍼 메서드 호출
                 processNodeWeights(event, book, dto.getNodeWeightsAccum());
-                // 'relations' 데이터를 처리하여 EventRelationshipEdge 테이블에 저장
                 processRelations(event, book, dto.getRelations());
 
             } catch (IOException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship JSON file: " + filename);
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "관계 정보 JSON 파일 파싱에 실패했습니다: " + filename);
             }
         }
     }
 
     /**
-     * [새로 추가됨] JSON의 'node_weights_accum' 부분을 처리하는 헬퍼 메서드입니다.
-     * 각 캐릭터의 가중치(weight)를 EventCharacterStat 테이블에 저장하거나 업데이트합니다.
+     * JSON의 'node_weights_accum' 부분을 처리하는 헬퍼 메서드
+     * 각 캐릭터의 가중치(weight)를 저장하기 전, 중복 데이터가 있는지 확인
      *
-     * @param event          현재 처리 중인 이벤트 엔티티
-     * @param book           현재 처리 중인 책 엔티티
+     * @param event          현재 처리 중인 이벤트 엔터티
+     * @param book           현재 처리 중인 책 엔터티
      * @param nodeWeightsMap JSON에서 파싱된 캐릭터 ID와 가중치 정보가 담긴 맵
      */
     private void processNodeWeights(Event event, Book book, Map<String, NodeWeightDTO> nodeWeightsMap) {
-        // 처리할 데이터가 없으면 즉시 반환
         if (nodeWeightsMap == null) return;
 
-        // 맵의 각 항목(캐릭터 ID, 가중치 정보)에 대해 반복
+        List<EventCharacterStat> newStats = new ArrayList<>();
         for (Map.Entry<String, NodeWeightDTO> entry : nodeWeightsMap.entrySet()) {
-            // 맵의 키(String)를 캐릭터의 책 내 ID(Long)로 변환
             Long characterBookId = Long.parseLong(entry.getKey());
             NodeWeightDTO weightDTO = entry.getValue();
 
-            // 책과 캐릭터 ID를 이용해 Character 엔터티를 조회
             Character character = characterRepository.findByBookAndCharacterId(book, characterBookId)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "Character not found for book-local id: " + characterBookId));
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "책에 정의된 ID가 " + characterBookId + "인 캐릭터를 찾을 수 없습니다."));
 
-            // 해당 이벤트와 캐릭터에 대한 기존 정보가 있는지 찾고,
-            // 없으면 새로운 EventCharacterStat 객체를 생성합니다.
-            EventCharacterStat stat = statRepository.findByEventAndCharacter(event, character)
-                    .orElse(EventCharacterStat.builder()
-                            .event(event)
-                            .character(character)
-                            .build());
+            // 기존 데이터가 있는지 확인
+            if (statRepository.findByEventAndCharacter(event, character).isPresent()) {
+                throw new GeneralException(ErrorStatus.NODE_WEIGHT_ALREADY_EXISTS,
+                        String.format("해당 이벤트에 대한 '%s' 캐릭터의 가중치 데이터가 이미 존재합니다.", character.getName()));
+            }
 
-            // DTO에서 읽어온 가중치(weight)로 통계 정보를 업데이트
-            stat.updateNodeWeight(weightDTO.getWeight());
-            // 변경된 통계 정보를 DB에 저장
-            statRepository.save(stat);
+            EventCharacterStat stat = EventCharacterStat.builder()
+                    .event(event)
+                    .character(character)
+                    .nodeWeight(weightDTO.getWeight())
+                    .build();
+            newStats.add(stat);
         }
+
+        // 모든 검사가 끝난 후, 한번에 저장
+        statRepository.saveAll(newStats);
     }
 
     /**
-     * JSON의 'relations' 부분을 처리하는 헬퍼 메서드입니다.
-     * 인물 관계들을 EventRelationshipEdge 테이블에 저장합니다.
+     * JSON의 'relations' 부분을 처리하는 헬퍼 메서드
+     * 인물 관계를 저장하기 전, 중복 데이터가 있는지 확인
      *
-     * @param event        현재 처리 중인 이벤트 엔티티
-     * @param book         현재 처리 중인 책 엔티티
+     * @param event        현재 처리 중인 이벤트 엔터티
+     * @param book         현재 처리 중인 책 엔터티
      * @param relationDTOs JSON에서 파싱된 관계 정보 DTO 목록
      */
     private void processRelations(Event event, Book book, List<RelationshipDTO> relationDTOs) {
-        // 처리할 데이터가 없으면 즉시 반환
         if (relationDTOs == null || relationDTOs.isEmpty()) {
             return;
         }
 
         List<EventRelationshipEdge> newEdges = new ArrayList<>();
         for (RelationshipDTO dto : relationDTOs) {
-            // 관계의 시작점(id1)과 끝점(id2)에 해당하는 캐릭터를 조회
             Character fromChar = characterRepository.findByBookAndCharacterId(book, dto.getId1())
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "From Character not found with jsonId: " + dto.getId1()));
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "id1에 해당하는 캐릭터(ID: " + dto.getId1() + ")를 찾을 수 없습니다."));
             Character toChar = characterRepository.findByBookAndCharacterId(book, dto.getId2())
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "To Character not found with jsonId: " + dto.getId2()));
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "id2에 해당하는 캐릭터(ID: " + dto.getId2() + ")를 찾을 수 없습니다."));
+
+            // 관계가 (A->B) 또는 (B->A) 방향으로 이미 존재하는지 확인
+            if (eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, fromChar, toChar) ||
+                    eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, toChar, fromChar)) {
+                throw new GeneralException(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS,
+                        String.format("해당 이벤트에 대한 '%s'와(과) '%s'의 관계 데이터가 이미 존재합니다.", fromChar.getName(), toChar.getName()));
+            }
 
             try {
-                // 빌더를 사용하여 EventRelationshipEdge 엔터티를 생성
                 EventRelationshipEdge edge = EventRelationshipEdge.builder()
                         .event(event)
                         .fromCharacter(fromChar)
                         .toCharacter(toChar)
-                        // edgeWeight는 수정된 JSON 파일에서 삭제됨
                         .sentimentScore(dto.getPositivity().floatValue())
                         .interactionCount(dto.getCount())
-                        .relationTags(objectMapper.writeValueAsString(dto.getRelation())) // 기존 방식대로 relationTags 저장
+                        .relationTags(objectMapper.writeValueAsString(dto.getRelation()))
                         .build();
                 newEdges.add(edge);
             } catch (JsonProcessingException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to process relation tags for characters " + dto.getId1() + " and " + dto.getId2());
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, String.format("캐릭터 %d와(과) %d의 관계 태그 처리 중 오류가 발생했습니다.", dto.getId1(), dto.getId2()));
             }
         }
 
-        // 리스트가 비어있지 않으면, 데이터베이스에 한번에 저장
+        // 모든 검사가 끝난 후, 한번에 저장
         if (!newEdges.isEmpty()) {
             eventRelationshipEdgeRepository.saveAll(newEdges);
         }
