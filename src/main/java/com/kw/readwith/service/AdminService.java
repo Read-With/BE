@@ -12,7 +12,7 @@ import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
-import com.kw.readwith.dto.admin.*; // 새로운 DTO import
+import com.kw.readwith.dto.admin.*;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.*;
 import lombok.Getter;
