@@ -50,10 +50,10 @@ public class AdminService {
     private final EventRepository eventRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
-    private final EventCharacterStatRepository statRepository; // 의존성 추가
+    private final EventCharacterStatRepository statRepository;
     private final ObjectMapper objectMapper;
 
-    // 파일명에서 챕터와 이벤트 인덱스를 추출하기 위한 정규표현식 패턴 (새로 추가)
+    // 파일명에서 챕터와 이벤트 인덱스를 추출하기 위한 정규표현식 패턴
     private static final Pattern RELATIONSHIP_FILE_PATTERN = Pattern.compile("chapter(\\d+)_.*?_event_(\\d+)\\.json");
 
     /*
@@ -71,22 +71,22 @@ public class AdminService {
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         try {
-            CharacterDTO.CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterDTO.CharacterListDTO.class);
+            CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterListDTO.class);
 
             List<Character> newCharacters = new ArrayList<>();
             for (CharacterDTO dto : characterListDTO.getCharacters()) {
                 // 중복 저장을 방지하기 위해, 해당 이름의 캐릭터가 없는 경우에만 추가
-                Optional<Character> existingCharacter = characterRepository.findByBookAndName(book, dto.getCommon_name());
+                Optional<Character> existingCharacter = characterRepository.findByBookAndName(book, dto.getCommonName());
 
                 if (existingCharacter.isEmpty()) {
                     Character character = Character.builder()
                             .book(book)
-                            .characterId(dto.getId().longValue())
-                            .name(dto.getCommon_name())
+                            .characterId(dto.getId())
+                            .name(dto.getCommonName())
                             .names(String.join(",", dto.getNames()))
-                            .isMainCharacter(dto.isMain_character())
+                            .isMainCharacter(dto.isMainCharacter())
                             .personalityText(dto.getDescription())
-                            .profileText(dto.getPortrait_prompt())
+                            .profileText(dto.getPortraitPrompt())
                             .build();
                     newCharacters.add(character);
                 }
