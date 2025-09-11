@@ -23,4 +23,9 @@ public class ManifestResponseDTO {
      * 인물 목록
      */
     private List<CharacterManifestDTO> characters;
+    
+    /**
+     * 책 메타데이터 (글자수, 챕터 수 등)
+     */
+    private BookMetadataDTO metadata;
 }

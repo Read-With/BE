@@ -22,4 +22,16 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
     List<Chapter> findByBookId(Long bookId);
 
+    /**
+     * 특정 책의 최대 챕터 번호 조회
+     */
+    @Query("SELECT MAX(c.idx) FROM Chapter c WHERE c.book.id = :bookId")
+    Integer findMaxChapterIdxByBookId(@Param("bookId") Long bookId);
+
+    /**
+     * 특정 책의 모든 챕터를 idx 순으로 조회 (글자수 계산용)
+     */
+    @Query("SELECT c FROM Chapter c WHERE c.book.id = :bookId ORDER BY c.idx ASC")
+    List<Chapter> findByBookIdOrderByIdxAsc(@Param("bookId") Long bookId);
+
 }

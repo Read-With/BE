@@ -49,11 +49,15 @@ public class ManifestService {
         Map<Long, List<Event>> eventsByChapter = events.stream()
                 .collect(Collectors.groupingBy(event -> event.getChapter().getId()));
         
-        // 5. DTO 변환
+        // 5. 책 메타데이터 계산
+        BookMetadataDTO metadata = calculateBookMetadata(book);
+        
+        // 6. DTO 변환
         return ManifestResponseDTO.builder()
                 .book(convertToBookManifestDTO(book))
                 .chapters(convertToChapterManifestDTOs(chapters, eventsByChapter))
                 .characters(convertToCharacterManifestDTOs(characters))
+                .metadata(metadata)
                 .build();
     }
 
@@ -189,5 +193,35 @@ public class ManifestService {
         
         // split 실패 시 기존 이름(fallbackName) 하나로 fallback
         return Collections.singletonList(fallbackName);
+    }
+
+    /**
+     * 책 메타데이터 계산 (글자수, 챕터 수 등)
+     */
+    private BookMetadataDTO calculateBookMetadata(Book book) {
+        // 1. 최대 챕터 수 조회
+        Integer maxChapter = chapterRepository.findMaxChapterIdxByBookId(book.getId());
+        if (maxChapter == null) {
+            maxChapter = 0;
+        }
+        
+        // 2. 각 챕터별 마지막 이벤트들 조회
+        List<Event> lastEvents = eventRepository.findLastEventsByBook(book);
+        
+        // 3. 챕터별 글자수 계산 (각 챕터의 마지막 이벤트의 endPos)
+        List<Integer> chapterCharacterCounts = lastEvents.stream()
+                .map(Event::getEndPos)
+                .collect(Collectors.toList());
+        
+        // 4. 전체 글자수 계산 (모든 챕터 글자수의 합)
+        Integer totalCharacterCount = chapterCharacterCounts.stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        
+        return BookMetadataDTO.builder()
+                .maxChapter(maxChapter)
+                .chapterCharacterCounts(chapterCharacterCounts)
+                .totalCharacterCount(totalCharacterCount)
+                .build();
     }
 }
