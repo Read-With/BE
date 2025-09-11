@@ -24,4 +24,10 @@ public class GraphNodeDTO {
     private String portraitPrompt;
     
     private List<String> names;
+    
+    // 노드 중요도 (크기)
+    private Float weight;
+    
+    // 참고용 카운트
+    private Integer count;
 }

@@ -5,6 +5,7 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
+import com.kw.readwith.domain.mapping.EventCharacterWeight;
 import com.kw.readwith.dto.graph.*;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
@@ -28,6 +29,7 @@ public class FineGraphService {
     private final EventRepository eventRepository;
     private final CharacterRepository characterRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
+    private final EventCharacterWeightRepository eventCharacterWeightRepository;
 
     /**
      * 세밀(이벤트) 그래프 조회 - 특정 이벤트에서의 관계
@@ -59,7 +61,7 @@ public class FineGraphService {
 
         // DTO 변환
         List<GraphNodeDTO> nodes = characters.stream()
-                .map(this::convertToGraphNodeDTO)
+                .map(character -> convertToGraphNodeDTO(character, event))
                 .collect(Collectors.toList());
 
         List<FineGraphEdgeDTO> edgeDTOs = edges.stream()
@@ -81,9 +83,17 @@ public class FineGraphService {
     }
 
     /**
-     * Character를 GraphNodeDTO로 변환
+     * Character를 GraphNodeDTO로 변환 (노드 중요도 포함)
      */
-    private GraphNodeDTO convertToGraphNodeDTO(Character character) {
+    private GraphNodeDTO convertToGraphNodeDTO(Character character, Event event) {
+        // 해당 이벤트에서의 캐릭터 중요도 조회
+        EventCharacterWeight characterWeight = eventCharacterWeightRepository
+                .findByEventAndCharacter(event, character)
+                .orElse(null);
+        
+        Float weight = characterWeight != null ? characterWeight.getWeight() : null;
+        Integer count = characterWeight != null ? characterWeight.getCount() : null;
+        
         return GraphNodeDTO.builder()
                 .id(character.getId())
                 .label(character.getName())
@@ -92,6 +102,8 @@ public class FineGraphService {
                 .description(truncateText(character.getProfileText(), 200))
                 .portraitPrompt(character.getPersonalityText())
                 .names(parseNames(character.getNames(), character.getName()))
+                .weight(weight)
+                .count(count)
                 .build();
     }
 

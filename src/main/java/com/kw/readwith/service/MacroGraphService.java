@@ -4,6 +4,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
+import com.kw.readwith.domain.mapping.EventCharacterWeight;
 import com.kw.readwith.dto.graph.*;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
@@ -28,6 +29,7 @@ public class MacroGraphService {
     private final EventRepository eventRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final UserReadStateRepository userReadStateRepository;
+    private final EventCharacterWeightRepository eventCharacterWeightRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -57,9 +59,19 @@ public class MacroGraphService {
 
         List<Character> characters = characterRepository.findAllById(characterIds);
 
-        // DTO 변환
+        // DTO 변환 - 각 캐릭터별로 해당하는 이벤트에서 중요도 조회
         List<GraphNodeDTO> nodes = characters.stream()
-                .map(this::convertToGraphNodeDTO)
+                .map(character -> {
+                    // 해당 캐릭터가 포함된 관계의 이벤트 찾기 (아무거나 하나 - 어차피 누적이므로 동일)
+                    Event relatedEvent = macroEdges.stream()
+                            .filter(edge -> edge.getFromCharacter().getId().equals(character.getId()) || 
+                                           edge.getToCharacter().getId().equals(character.getId()))
+                            .map(EventRelationshipEdge::getEvent)
+                            .findFirst()
+                            .orElse(null);
+                    
+                    return convertToGraphNodeDTO(character, relatedEvent);
+                })
                 .collect(Collectors.toList());
 
         List<MacroGraphEdgeDTO> edgeDTOs = macroEdges.stream()
@@ -77,9 +89,17 @@ public class MacroGraphService {
     }
 
     /**
-     * Character를 GraphNodeDTO로 변환
+     * Character를 GraphNodeDTO로 변환 (특정 이벤트에서의 중요도 사용)
      */
-    private GraphNodeDTO convertToGraphNodeDTO(Character character) {
+    private GraphNodeDTO convertToGraphNodeDTO(Character character, Event event) {
+        // 해당 이벤트에서의 캐릭터 중요도 조회
+        EventCharacterWeight characterWeight = eventCharacterWeightRepository
+                .findByEventAndCharacter(event, character)
+                .orElse(null);
+        
+        Float weight = characterWeight != null ? characterWeight.getWeight() : null;
+        Integer count = characterWeight != null ? characterWeight.getCount() : null;
+        
         return GraphNodeDTO.builder()
                 .id(character.getId())
                 .label(character.getName())
@@ -88,6 +108,8 @@ public class MacroGraphService {
                 .description(truncateText(character.getProfileText(), 200))
                 .portraitPrompt(character.getPersonalityText())
                 .names(parseNames(character.getNames(), character.getName()))
+                .weight(weight)
+                .count(count)
                 .build();
     }
 
