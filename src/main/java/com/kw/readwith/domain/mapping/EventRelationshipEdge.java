@@ -44,7 +44,4 @@ public class EventRelationshipEdge extends BaseEntity {
     private SentimentLabel sentimentLabel;
 
     private String edgeColorHex;
-
-    @Column(name = "edge_weight")
-    private Float edgeWeight;
 }

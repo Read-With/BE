@@ -12,6 +12,5 @@ public class RelationshipDTO {
     private Double id1;
     private Double id2;
     private Double positivity;
-    private Double weight;
     private Integer count;
 }

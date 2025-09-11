@@ -11,6 +11,7 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
+import com.kw.readwith.domain.mapping.EventCharacterWeight;
 import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.EventDTO;
 import com.kw.readwith.dto.admin.RelationshipDTO;
@@ -53,6 +54,7 @@ public class AdminService {
     private final EventRepository eventRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
+    private final EventCharacterWeightRepository eventCharacterWeightRepository;
     private final ObjectMapper objectMapper;
 
     /*
@@ -252,7 +254,6 @@ public class AdminService {
                         .fromCharacter(fromChar)
                         .toCharacter(toChar)
                         .event(event)
-                        .edgeWeight(dto.getWeight().floatValue())
                         .sentimentScore(dto.getPositivity().floatValue())
                         .interactionCount(dto.getCount())
                         .relationTags(objectMapper.writeValueAsString(dto.getRelation()))
@@ -265,6 +266,32 @@ public class AdminService {
 
         if (!newEdges.isEmpty()) {
             eventRelationshipEdgeRepository.saveAll(newEdges);
+        }
+
+        // node_weights_accum 데이터 처리
+        if (uploadDTO.getNodeWeightsAccum() != null && !uploadDTO.getNodeWeightsAccum().isEmpty()) {
+            List<EventCharacterWeight> characterWeights = new ArrayList<>();
+            
+            for (Map.Entry<String, RelationshipUploadDTO.NodeWeightDTO> entry : uploadDTO.getNodeWeightsAccum().entrySet()) {
+                Long characterId = Long.parseLong(entry.getKey());
+                RelationshipUploadDTO.NodeWeightDTO weightDTO = entry.getValue();
+                
+                Character character = characterRepository.findByBookAndCharacterId(book, characterId)
+                        .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "Character not found with jsonId: " + characterId));
+                
+                EventCharacterWeight characterWeight = EventCharacterWeight.builder()
+                        .event(event)
+                        .character(character)
+                        .weight(weightDTO.getWeight())
+                        .count(weightDTO.getCount())
+                        .build();
+                
+                characterWeights.add(characterWeight);
+            }
+            
+            if (!characterWeights.isEmpty()) {
+                eventCharacterWeightRepository.saveAll(characterWeights);
+            }
         }
     }
 

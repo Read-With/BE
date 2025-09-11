@@ -6,6 +6,7 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
+import com.kw.readwith.domain.mapping.EventCharacterWeight;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -13,6 +14,7 @@ import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.UserRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
+import com.kw.readwith.repository.EventCharacterWeightRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -28,6 +30,7 @@ public class DataLoader implements CommandLineRunner {
     private final EventRepository eventRepository;
     private final CharacterRepository characterRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
+    private final EventCharacterWeightRepository eventCharacterWeightRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -356,7 +359,7 @@ public class DataLoader implements CommandLineRunner {
     }
 
     /**
-     * 해리포터 관계 데이터 생성 (Admin API 업로드 형태와 동일)
+     * 해리포터 관계 데이터 생성 (새로운 JSON 구조에 맞춤)
      */
     private void createHarryPotterRelationships(Book book, Event event, Character harry, Character hermione, Character ron, Character hagrid) {
         // 해리 - 해그리드 관계 (긍정적)
@@ -364,10 +367,9 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(harry)
                 .toCharacter(hagrid)
                 .event(event)
-                .edgeWeight(3.5f)  // Admin API의 weight 필드
-                .sentimentScore(0.8f)  // Admin API의 positivity 필드
-                .interactionCount(2)  // Admin API의 count 필드
-                .relationTags("[\"care\", \"protection\"]")  // Admin API의 relation 필드 (JSON 문자열)
+                .sentimentScore(0.8f)  // positivity 필드
+                .interactionCount(2)  // count 필드
+                .relationTags("[\"care\", \"protection\"]")  // relation 필드 (JSON 문자열)
                 .build();
         eventRelationshipEdgeRepository.save(harryHagrid);
 
@@ -376,17 +378,32 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(hagrid)
                 .toCharacter(harry)
                 .event(event)
-                .edgeWeight(3.5f)
                 .sentimentScore(0.7f)
                 .interactionCount(2)
                 .relationTags("[\"mentorship\", \"guidance\"]")
                 .build();
         eventRelationshipEdgeRepository.save(hagridHarry);
 
+        // 캐릭터별 중요도 데이터 추가 (node_weights_accum에 해당)
+        EventCharacterWeight harryWeight = EventCharacterWeight.builder()
+                .event(event)
+                .character(harry)
+                .weight(6.5f)
+                .count(8)
+                .build();
+        eventCharacterWeightRepository.save(harryWeight);
+
+        EventCharacterWeight hagridWeight = EventCharacterWeight.builder()
+                .event(event)
+                .character(hagrid)
+                .weight(4.2f)
+                .count(5)
+                .build();
+        eventCharacterWeightRepository.save(hagridWeight);
     }
 
     /**
-     * 반지의 제왕 관계 데이터 생성
+     * 반지의 제왕 관계 데이터 생성 (새로운 JSON 구조에 맞춤)
      */
     private void createLordOfTheRingsRelationships(Book book, Event event, Character frodo, Character gandalf, Character aragorn) {
         // 프로도 - 간달프 관계 (신뢰)
@@ -394,7 +411,6 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(frodo)
                 .toCharacter(gandalf)
                 .event(event)
-                .edgeWeight(4.0f)
                 .sentimentScore(0.9f)
                 .interactionCount(3)
                 .relationTags("[\"trust\", \"guidance\", \"friendship\"]")
@@ -406,12 +422,35 @@ public class DataLoader implements CommandLineRunner {
                 .fromCharacter(gandalf)
                 .toCharacter(frodo)
                 .event(event)
-                .edgeWeight(4.2f)
                 .sentimentScore(0.85f)
                 .interactionCount(3)
                 .relationTags("[\"protection\", \"mentorship\"]")
                 .build();
         eventRelationshipEdgeRepository.save(gandalfFrodo);
 
+        // 캐릭터별 중요도 데이터 추가 (node_weights_accum에 해당)
+        EventCharacterWeight frodoWeight = EventCharacterWeight.builder()
+                .event(event)
+                .character(frodo)
+                .weight(7.1f)
+                .count(12)
+                .build();
+        eventCharacterWeightRepository.save(frodoWeight);
+
+        EventCharacterWeight gandalfWeight = EventCharacterWeight.builder()
+                .event(event)
+                .character(gandalf)
+                .weight(5.8f)
+                .count(9)
+                .build();
+        eventCharacterWeightRepository.save(gandalfWeight);
+
+        EventCharacterWeight aragornWeight = EventCharacterWeight.builder()
+                .event(event)
+                .character(aragorn)
+                .weight(4.5f)
+                .count(6)
+                .build();
+        eventCharacterWeightRepository.save(aragornWeight);
     }
 } 

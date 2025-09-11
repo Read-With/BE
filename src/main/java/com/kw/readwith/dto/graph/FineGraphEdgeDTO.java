@@ -15,8 +15,6 @@ public class FineGraphEdgeDTO {
     @JsonProperty("id2")
     private Long to;
     
-    private Double weight;
-    
     @JsonProperty("positivity")
     private Double sentimentScore;
     

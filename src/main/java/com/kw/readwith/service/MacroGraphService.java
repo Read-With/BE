@@ -134,7 +134,6 @@ public class MacroGraphService {
         return MacroGraphEdgeDTO.builder()
                 .from(edge.getFromCharacter().getId())
                 .to(edge.getToCharacter().getId())
-                .weight(edge.getEdgeWeight() != null ? edge.getEdgeWeight().doubleValue() : 0.0)
                 .sentimentScore(edge.getSentimentScore() != null ? edge.getSentimentScore().doubleValue() : 0.0)
                 .interactionCount(edge.getInteractionCount())
                 .relationTags(relationTags)
