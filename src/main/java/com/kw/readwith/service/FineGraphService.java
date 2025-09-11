@@ -10,12 +10,14 @@ import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -67,7 +69,8 @@ public class FineGraphService {
         EventInfoDTO eventInfo = EventInfoDTO.builder()
                 .chapterIdx(chapterIdx)
                 .eventIdx(eventIdx)
-                .eventText(truncateText(event.getRawText(), 100))
+                .start(event.getStartPos())
+                .end(event.getEndPos())
                 .build();
 
         return FineGraphResponseDTO.builder()
@@ -88,7 +91,7 @@ public class FineGraphService {
                 .profileImage(character.getProfileImage())
                 .description(truncateText(character.getProfileText(), 200))
                 .portraitPrompt(character.getPersonalityText())
-                .names(character.getNames())
+                .names(parseNames(character.getNames(), character.getName()))
                 .build();
     }
 
@@ -126,5 +129,30 @@ public class FineGraphService {
         }
         
         return cleanText.substring(0, maxLength - 3) + "...";
+    }
+
+    /**
+     * names 문자열을 List<String>으로 변환 (에러 처리 포함)
+     */
+    private List<String> parseNames(String namesString, String fallbackName) {
+        try {
+            if (namesString != null && !namesString.trim().isEmpty()) {
+                List<String> parsedNames = Arrays.asList(namesString.split(","))
+                        .stream()
+                        .map(String::trim)
+                        .filter(name -> !name.isEmpty())
+                        .collect(Collectors.toList());
+                
+                if (!parsedNames.isEmpty()) {
+                    return parsedNames;
+                }
+            }
+        } catch (Exception e) {
+            // 로그 기록하고 fallback 처리
+            log.warn("Failed to parse names: {}, using fallback: {}", namesString, fallbackName, e);
+        }
+        
+        // split 실패 시 기존 이름(fallbackName) 하나로 fallback
+        return Collections.singletonList(fallbackName);
     }
 }
