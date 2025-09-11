@@ -16,9 +16,12 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     boolean existsByBookAndChapter(Book book, Chapter chapter);
     Optional<Event> findByChapterAndIdx(Chapter chapter, Integer idx);
 
-    // Event를 찾는 메소드
-    Optional<Event> findByBookAndChapterAndIdx(Book book, Chapter chapter, Integer idx);
-    
+    /**
+     * 이벤트를 찾는 메서드
+     */
+    @Query("SELECT e FROM Event e JOIN e.chapter c WHERE e.book.id = :bookId AND c.idx = :chapterIdx AND e.idx = :eventIdx")
+    Optional<Event> findByBookIdAndChapterIdxAndEventIdx(@Param("bookId") Long bookId, @Param("chapterIdx") int chapterIdx, @Param("eventIdx") int eventIdx);
+
     /**
      * 특정 챕터의 모든 이벤트를 인덱스 순으로 조회
      */

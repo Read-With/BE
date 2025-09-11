@@ -52,6 +52,7 @@ public enum ErrorStatus implements BaseErrorCode {
     NO_SUMMARY_TO_DELETE(HttpStatus.BAD_REQUEST, "ADMIN4013", "삭제할 POV 요약본이 존재하지 않습니다."),
     NO_RELATIONSHIPS_TO_DELETE(HttpStatus.BAD_REQUEST, "ADMIN4015", "삭제할 관계 정보가 존재하지 않습니다."),
     INVALID_FILE_NAME_FORMAT(HttpStatus.BAD_REQUEST, "ADMIN4016", "잘못된 형식의 파일 이름입니다. 'chapter<숫자>_perspective_summaries.json' 형식을 따라야 합니다."),
+    NODE_WEIGHT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ADMIN4018", "해당 이벤트의 캐릭터 가중치 데이터가 이미 존재합니다."),
 
     // Bookmark
     BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKMARK4001", "해당 북마크를 찾을 수 없습니다."),

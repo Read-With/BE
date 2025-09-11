@@ -8,9 +8,9 @@ import java.util.List;
 @Getter
 @NoArgsConstructor
 public class RelationshipDTO {
+    private Long id1;
+    private Long id2;
     private List<String> relation;
-    private Double id1;
-    private Double id2;
     private Double positivity;
     private Double weight;
     private Integer count;
