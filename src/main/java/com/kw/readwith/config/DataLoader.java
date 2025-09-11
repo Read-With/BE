@@ -6,7 +6,6 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
-import com.kw.readwith.domain.mapping.ChapterRelationshipEdge;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -14,7 +13,6 @@ import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.UserRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
-import com.kw.readwith.repository.ChapterRelationshipEdgeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -30,7 +28,6 @@ public class DataLoader implements CommandLineRunner {
     private final EventRepository eventRepository;
     private final CharacterRepository characterRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
-    private final ChapterRelationshipEdgeRepository chapterRelationshipEdgeRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -386,30 +383,6 @@ public class DataLoader implements CommandLineRunner {
                 .build();
         eventRelationshipEdgeRepository.save(hagridHarry);
 
-        // ChapterRelationshipEdge 누적 데이터 생성 (챕터 1 기준)
-        ChapterRelationshipEdge chapterEdge1 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(harry)
-                .toCharacter(hagrid)
-                .cumulativeInteraction(2)
-                .sentimentWeightedSum(1.6f)  // 0.8 * 2
-                .edgeColorHex("#4CAF50")  // 긍정적 관계 - 녹색
-                .edgeWidth(2.5f)
-                .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge1);
-
-        ChapterRelationshipEdge chapterEdge2 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(hagrid)
-                .toCharacter(harry)
-                .cumulativeInteraction(2)
-                .sentimentWeightedSum(1.4f)  // 0.7 * 2
-                .edgeColorHex("#4CAF50")
-                .edgeWidth(2.5f)
-                .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge2);
     }
 
     /**
@@ -440,29 +413,5 @@ public class DataLoader implements CommandLineRunner {
                 .build();
         eventRelationshipEdgeRepository.save(gandalfFrodo);
 
-        // ChapterRelationshipEdge 누적 데이터
-        ChapterRelationshipEdge chapterEdge1 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(frodo)
-                .toCharacter(gandalf)
-                .cumulativeInteraction(3)
-                .sentimentWeightedSum(2.7f)  // 0.9 * 3
-                .edgeColorHex("#2196F3")  // 신뢰 관계 - 파란색
-                .edgeWidth(3.0f)
-                .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge1);
-
-        ChapterRelationshipEdge chapterEdge2 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(gandalf)
-                .toCharacter(frodo)
-                .cumulativeInteraction(3)
-                .sentimentWeightedSum(2.55f)  // 0.85 * 3
-                .edgeColorHex("#2196F3")
-                .edgeWidth(3.0f)
-                .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge2);
     }
 } 

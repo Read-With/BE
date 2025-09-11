@@ -1,7 +1,6 @@
 package com.kw.readwith.domain;
 
 import com.kw.readwith.domain.common.BaseEntity;
-import com.kw.readwith.domain.mapping.ChapterRelationshipEdge;
 import com.kw.readwith.domain.mapping.UserReadState;
 import com.kw.readwith.domain.mapping.Favorite;
 import jakarta.persistence.*;
@@ -53,9 +52,6 @@ public class Book extends BaseEntity {
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
     private List<Character> characters = new ArrayList<>();
-
-    @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
-    private List<ChapterRelationshipEdge> chapterEdges = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
     private List<UserReadState> readStates = new ArrayList<>();
