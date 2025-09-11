@@ -32,6 +32,24 @@ public interface EventRepository extends JpaRepository<Event, Long> {
            "ORDER BY c.idx ASC, e.idx ASC")
     List<Event> findByBookOrderByChapterIdxAscIdxAsc(@Param("book") Book book);
 
+    /**
+     * 특정 챕터의 마지막 이벤트 조회 (가장 큰 idx)
+     */
+    @Query("SELECT e FROM Event e " +
+           "WHERE e.chapter = :chapter " +
+           "ORDER BY e.idx DESC " +
+           "LIMIT 1")
+    Optional<Event> findLastEventByChapter(@Param("chapter") Chapter chapter);
+
+    /**
+     * 특정 책의 특정 챕터까지의 각 챕터별 마지막 이벤트들 조회
+     */
+    @Query("SELECT e FROM Event e " +
+           "WHERE e.book = :book AND e.chapter.idx <= :uptoChapter " +
+           "AND e.idx = (SELECT MAX(e2.idx) FROM Event e2 WHERE e2.chapter = e.chapter) " +
+           "ORDER BY e.chapter.idx ASC")
+    List<Event> findLastEventsByChaptersUpTo(@Param("book") Book book, @Param("uptoChapter") Integer uptoChapter);
+
     boolean existsByChapter(Chapter chapter);
 
     @Modifying

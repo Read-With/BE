@@ -47,7 +47,7 @@ public class GraphController {
     @GetMapping("/macro")
     @Operation(
             summary = "거시(챕터 누적) 그래프 조회",
-            description = "특정 챕터까지의 누적 인물 관계 그래프를 조회합니다. ChapterRelationshipEdge 기반으로 챕터별 누적 관계를 반환합니다."
+            description = "특정 챕터까지의 누적 인물 관계 그래프를 조회합니다. 각 챕터별 마지막 이벤트의 관계 데이터를 기반으로 누적 관계를 반환합니다."
     )
     public ApiResponse<MacroGraphResponseDTO> getMacroGraph(
             @Parameter(description = "책 ID", required = true, example = "1")
