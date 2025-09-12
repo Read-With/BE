@@ -48,11 +48,15 @@ public class ManifestService {
         Map<Long, List<Event>> eventsByChapter = events.stream()
                 .collect(Collectors.groupingBy(event -> event.getChapter().getId()));
         
-        // 5. DTO 변환
+        // 5. Progress 메타데이터 계산
+        ProgressMetadataDTO progressMetadata = calculateProgressMetadata(book);
+        
+        // 6. DTO 변환
         return ManifestResponseDTO.builder()
                 .book(convertToBookManifestDTO(book))
                 .chapters(convertToChapterManifestDTOs(chapters, eventsByChapter))
                 .characters(convertToCharacterManifestDTOs(characters))
+                .progressMetadata(progressMetadata)
                 .build();
     }
 
@@ -145,6 +149,34 @@ public class ManifestService {
                         .profileText(character.getProfileText())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Progress 메타데이터 계산
+     */
+    private ProgressMetadataDTO calculateProgressMetadata(Book book) {
+        // 1. 최대 챕터 수 조회
+        Integer maxChapter = chapterRepository.findMaxChapterIdxByBook(book);
+        
+        // 2. 각 챕터별 글자수 조회
+        List<Object[]> chapterLengthData = chapterRepository.findChapterLengthsByBook(book);
+        List<ChapterLengthDTO> chapterLengths = chapterLengthData.stream()
+                .map(data -> ChapterLengthDTO.builder()
+                        .chapterIdx((Integer) data[0])
+                        .length((Integer) data[1])
+                        .build())
+                .collect(Collectors.toList());
+        
+        // 3. 전체 글자수 계산
+        Integer totalLength = chapterLengths.stream()
+                .mapToInt(ChapterLengthDTO::getLength)
+                .sum();
+        
+        return ProgressMetadataDTO.builder()
+                .maxChapter(maxChapter)
+                .chapterLengths(chapterLengths)
+                .totalLength(totalLength)
+                .build();
     }
 
     /**
