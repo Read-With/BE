@@ -155,8 +155,11 @@ public class ManifestService {
      * Progress 메타데이터 계산
      */
     private ProgressMetadataDTO calculateProgressMetadata(Book book) {
-        // 1. 최대 챕터 수 조회
+        // 1. 최대 챕터 수 조회 (null 처리)
         Integer maxChapter = chapterRepository.findMaxChapterIdxByBook(book);
+        if (maxChapter == null) {
+            maxChapter = 0; // 챕터가 없는 경우 기본값
+        }
         
         // 2. 각 챕터별 글자수 조회
         List<Object[]> chapterLengthData = chapterRepository.findChapterLengthsByBook(book);
@@ -167,7 +170,7 @@ public class ManifestService {
                         .build())
                 .collect(Collectors.toList());
         
-        // 3. 전체 글자수 계산
+        // 3. 전체 글자수 계산 (최소값 보장)
         Integer totalLength = chapterLengths.stream()
                 .mapToInt(ChapterLengthDTO::getLength)
                 .sum();
@@ -175,7 +178,7 @@ public class ManifestService {
         return ProgressMetadataDTO.builder()
                 .maxChapter(maxChapter)
                 .chapterLengths(chapterLengths)
-                .totalLength(totalLength)
+                .totalLength(Math.max(totalLength, 0)) // 최소값 0 보장
                 .build();
     }
 
