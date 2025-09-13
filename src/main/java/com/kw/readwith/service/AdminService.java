@@ -138,7 +138,7 @@ public class AdminService {
                                 .idx(dto.getEventId())
                                 .startPos(dto.getStart())
                                 .endPos(dto.getEnd())
-                                .rawText(dto.getText())
+                                .rawText("") // text 필드가 제거되어 빈 문자열로 설정
                                 .build())
                         .collect(Collectors.toList());
                 allNewEvents.addAll(newEventsFromFile);

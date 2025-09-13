@@ -32,6 +32,7 @@ public class Book extends BaseEntity {
     private boolean isDefault;
 
     @Column(nullable = false)
+    @Builder.Default
     private boolean summary = false;
 
     @Column(name = "cover_img_url", length = 255)
@@ -49,21 +50,27 @@ public class Book extends BaseEntity {
 
     /* 관계 */
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Chapter> chapters = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Character> characters = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<ChapterRelationshipEdge> chapterEdges = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<UserReadState> readStates = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Favorite> favorites = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Bookmark> bookmarks = new ArrayList<>();
 
     /**

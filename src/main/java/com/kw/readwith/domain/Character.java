@@ -59,8 +59,10 @@ public class Character extends BaseEntity {
 
     /* 관계 */
     @OneToMany(mappedBy = "character", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<EventCharacterStat> eventStats = new ArrayList<>();
 
     @OneToMany(mappedBy = "character", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<ChapterCharacterStat> chapterStats = new ArrayList<>();
 }
