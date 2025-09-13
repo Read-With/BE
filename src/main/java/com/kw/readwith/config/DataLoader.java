@@ -384,13 +384,38 @@ public class DataLoader implements CommandLineRunner {
                 .build();
         eventRelationshipEdgeRepository.save(hagridHarry);
 
-        // EventCharacterStat 노드 중요도 데이터 생성
+        // 헤르미온느 - 론 관계 추가
+        EventRelationshipEdge hermioneRon = EventRelationshipEdge.builder()
+                .fromCharacter(hermione)
+                .toCharacter(ron)
+                .event(event)
+                .sentimentScore(0.6f)
+                .interactionCount(1)
+                .relationTags("[\"friendship\", \"study\"]")
+                .build();
+        eventRelationshipEdgeRepository.save(hermioneRon);
+
+        // 모든 캐릭터에 대한 EventCharacterStat 노드 중요도 데이터 생성
         EventCharacterStat harryStat = EventCharacterStat.builder()
                 .event(event)
                 .character(harry)
                 .nodeWeight(6.5)  // 해리는 주인공이므로 높은 중요도
                 .build();
         eventCharacterStatRepository.save(harryStat);
+
+        EventCharacterStat hermioneStat = EventCharacterStat.builder()
+                .event(event)
+                .character(hermione)
+                .nodeWeight(5.8)  // 헤르미온느는 주요 조연
+                .build();
+        eventCharacterStatRepository.save(hermioneStat);
+
+        EventCharacterStat ronStat = EventCharacterStat.builder()
+                .event(event)
+                .character(ron)
+                .nodeWeight(5.5)  // 론은 주요 조연
+                .build();
+        eventCharacterStatRepository.save(ronStat);
 
         EventCharacterStat hagridStat = EventCharacterStat.builder()
                 .event(event)
@@ -426,7 +451,18 @@ public class DataLoader implements CommandLineRunner {
                 .build();
         eventRelationshipEdgeRepository.save(gandalfFrodo);
 
-        // EventCharacterStat 노드 중요도 데이터 생성
+        // 아라고른 - 프로도 관계 추가
+        EventRelationshipEdge aragornFrodo = EventRelationshipEdge.builder()
+                .fromCharacter(aragorn)
+                .toCharacter(frodo)
+                .event(event)
+                .sentimentScore(0.7f)
+                .interactionCount(1)
+                .relationTags("[\"protection\", \"duty\"]")
+                .build();
+        eventRelationshipEdgeRepository.save(aragornFrodo);
+
+        // 모든 캐릭터에 대한 EventCharacterStat 노드 중요도 데이터 생성
         EventCharacterStat frodoStat = EventCharacterStat.builder()
                 .event(event)
                 .character(frodo)
@@ -440,5 +476,12 @@ public class DataLoader implements CommandLineRunner {
                 .nodeWeight(6.8)  // 간달프는 중요한 조력자
                 .build();
         eventCharacterStatRepository.save(gandalfStat);
+
+        EventCharacterStat aragornStat = EventCharacterStat.builder()
+                .event(event)
+                .character(aragorn)
+                .nodeWeight(6.0)  // 아라고른은 중요한 왕족
+                .build();
+        eventCharacterStatRepository.save(aragornStat);
     }
 }
