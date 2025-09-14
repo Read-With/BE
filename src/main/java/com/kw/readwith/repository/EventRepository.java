@@ -38,5 +38,5 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     boolean existsByChapter(Chapter chapter);
 
     @Modifying
-    void deleteByChapter(Chapter chapter);
+    int deleteByChapter(Chapter chapter);
 }

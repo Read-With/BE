@@ -66,7 +66,7 @@ public class AdminService {
      * 등장인물 정보가 담긴 JSON 파일을 업로드합니다.
      */
     @Transactional
-    public void uploadCharacters(Long bookId, MultipartFile file) {
+    public int uploadCharacters(Long bookId, MultipartFile file) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
@@ -95,6 +95,7 @@ public class AdminService {
             if (!newCharacters.isEmpty()) {
                 characterRepository.saveAll(newCharacters);
             }
+            return newCharacters.size();
 
         } catch (IOException e) {
             throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
@@ -106,7 +107,7 @@ public class AdminService {
      * 파일 이름(chapter<번호>_events.json)에서 챕터 번호를 자동으로 인식합니다.
      */
     @Transactional
-    public void uploadEvents(Long bookId, List<MultipartFile> eventFiles) {
+    public int uploadEvents(Long bookId, List<MultipartFile> eventFiles) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
@@ -153,13 +154,14 @@ public class AdminService {
         if (!allNewEvents.isEmpty()) {
             eventRepository.saveAll(allNewEvents);
         }
+        return allNewEvents.size();
     }
 
     /**
      * 여러 챕터의 POV 요약 JSON 파일들을 한번에 업로드합니다.
      */
     @Transactional
-    public void uploadChapterSummaries(Long bookId, List<MultipartFile> summaryFiles) {
+    public int uploadChapterSummaries(Long bookId, List<MultipartFile> summaryFiles) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
@@ -214,6 +216,7 @@ public class AdminService {
 
         // 모든 챕터의 요약이 완료되었는지 확인 후, 책의 전체 요약 상태 업데이트
         checkAndUpdateBookSummaryStatus(book);
+        return allNewSummaries.size();
     }
 
     /**
@@ -224,10 +227,12 @@ public class AdminService {
      * @param files  업로드할 관계 정보 JSON 파일 목록
      */
     @Transactional
-    public void uploadRelationships(Long bookId, List<MultipartFile> files) {
+    public int uploadRelationships(Long bookId, List<MultipartFile> files) {
         // 입력된 bookId로 Book 엔터티를 조회
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        int totalProcessedCount = 0;
 
         // 업로드된 각 파일에 대해 반복 처리를 시작
         for (MultipartFile file : files) {
@@ -253,13 +258,14 @@ public class AdminService {
                 RelationshipUploadDTO dto = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
 
                 // DTO의 각 부분을 처리하는 헬퍼 메서드 호출
-                processNodeWeights(event, book, dto.getNodeWeightsAccum());
-                processRelations(event, book, dto.getRelations());
+                totalProcessedCount += processNodeWeights(event, book, dto.getNodeWeightsAccum());
+                totalProcessedCount += processRelations(event, book, dto.getRelations());
 
             } catch (IOException e) {
                 throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "관계 정보 JSON 파일 파싱에 실패했습니다: " + filename);
             }
         }
+        return totalProcessedCount;
     }
 
     /**
@@ -270,8 +276,10 @@ public class AdminService {
      * @param book           현재 처리 중인 책 엔터티
      * @param nodeWeightsMap JSON에서 파싱된 캐릭터 ID와 가중치 정보가 담긴 맵
      */
-    private void processNodeWeights(Event event, Book book, Map<String, NodeWeightDTO> nodeWeightsMap) {
-        if (nodeWeightsMap == null) return;
+    private int processNodeWeights(Event event, Book book, Map<String, NodeWeightDTO> nodeWeightsMap) {
+        if (nodeWeightsMap == null || nodeWeightsMap.isEmpty()) {
+            return 0;
+        }
 
         List<EventCharacterStat> newStats = new ArrayList<>();
         for (Map.Entry<String, NodeWeightDTO> entry : nodeWeightsMap.entrySet()) {
@@ -297,6 +305,7 @@ public class AdminService {
 
         // 모든 검사가 끝난 후, 한번에 저장
         statRepository.saveAll(newStats);
+        return newStats.size();
     }
 
     /**
@@ -307,9 +316,9 @@ public class AdminService {
      * @param book         현재 처리 중인 책 엔터티
      * @param relationDTOs JSON에서 파싱된 관계 정보 DTO 목록
      */
-    private void processRelations(Event event, Book book, List<RelationshipDTO> relationDTOs) {
+    private int processRelations(Event event, Book book, List<RelationshipDTO> relationDTOs) {
         if (relationDTOs == null || relationDTOs.isEmpty()) {
-            return;
+            return 0;
         }
 
         List<EventRelationshipEdge> newEdges = new ArrayList<>();
@@ -345,6 +354,7 @@ public class AdminService {
         if (!newEdges.isEmpty()) {
             eventRelationshipEdgeRepository.saveAll(newEdges);
         }
+        return newEdges.size();
     }
 
     /*
@@ -390,51 +400,52 @@ public class AdminService {
      * 특정 책에 속한 모든 등장인물을 삭제합니다.
      */
     @Transactional
-    public void deleteCharacters(Long bookId) {
+    public int deleteCharacters(Long bookId) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         if (!characterRepository.existsByBook(book)) {
             throw new GeneralException(ErrorStatus.NO_CHARACTERS_TO_DELETE);
         }
-        characterRepository.deleteByBook(book);
+        return characterRepository.deleteByBook(book);
     }
 
     /**
      * 특정 챕터에 속한 모든 이벤트를 삭제합니다.
      */
     @Transactional
-    public void deleteEvents(Long bookId, Integer chapterIdx) {
+    public int deleteEvents(Long bookId, Integer chapterIdx) {
         Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
 
         if (!eventRepository.existsByChapter(chapter)) {
             throw new GeneralException(ErrorStatus.NO_EVENTS_TO_DELETE);
         }
-        eventRepository.deleteByChapter(chapter);
+        return eventRepository.deleteByChapter(chapter);
     }
 
     /**
      * 특정 챕터의 모든 POV 요약본을 삭제합니다.
      */
     @Transactional
-    public void deleteChapterSummary(Long bookId, Integer chapterIdx) {
+    public int deleteChapterSummary(Long bookId, Integer chapterIdx) {
         Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
 
         if (!characterPovSummaryRepository.existsByChapter(chapter)) {
             throw new GeneralException(ErrorStatus.NO_SUMMARY_TO_DELETE);
         }
-        characterPovSummaryRepository.deleteByChapter(chapter);
+        int deletedCount = characterPovSummaryRepository.deleteByChapter(chapter);
         // 챕터의 요약 상태를 '미완료'로 되돌림
         chapter.markPovSummariesAsUncached();
+        return deletedCount;
     }
 
     /**
      * 특정 이벤트에 연결된 모든 관계 정보를 삭제합니다.
      */
     @Transactional
-    public void deleteRelationships(Long bookId, Integer chapterIdx, Integer eventIdx) {
+    public int deleteRelationships(Long bookId, Integer chapterIdx, Integer eventIdx) {
         Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
 
@@ -444,7 +455,7 @@ public class AdminService {
         if (!eventRelationshipEdgeRepository.existsByEvent(event)) {
             throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE);
         }
-        eventRelationshipEdgeRepository.deleteByEvent(event);
+        return eventRelationshipEdgeRepository.deleteByEvent(event);
     }
 
     /*

@@ -30,5 +30,5 @@ public interface CharacterRepository extends JpaRepository<Character, Long> {
     boolean existsByBook(Book book);
 
     @Modifying
-    void deleteByBook(Book book);
+    int deleteByBook(Book book);
 }
