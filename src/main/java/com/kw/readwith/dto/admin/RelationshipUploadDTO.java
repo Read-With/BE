@@ -16,6 +16,4 @@ public class RelationshipUploadDTO {
 
     @JsonProperty("node_weights_accum")
     private Map<String, NodeWeightDTO> nodeWeightsAccum;
-
-    private Map<String, Object> log;
 }

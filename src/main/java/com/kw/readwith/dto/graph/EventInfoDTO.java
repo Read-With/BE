@@ -1,5 +1,6 @@
 package com.kw.readwith.dto.graph;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -7,6 +8,10 @@ import lombok.Getter;
 @Builder
 public class EventInfoDTO {
     private Integer chapterIdx;
+    
+    @JsonProperty("event_id")
     private Integer eventIdx;
-    private String eventText;
+    
+    private Integer start;
+    private Integer end;
 }

@@ -1,5 +1,6 @@
 package com.kw.readwith.repository;
 
+import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -21,5 +22,19 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     Optional<Chapter> findByBookIdAndIdx(@Param("bookId") Long bookId, @Param("idx") int idx);
 
     List<Chapter> findByBookId(Long bookId);
+
+    /**
+     * 특정 책의 최대 챕터 인덱스 조회
+     */
+    @Query("SELECT MAX(c.idx) FROM Chapter c WHERE c.book = :book")
+    Integer findMaxChapterIdxByBook(@Param("book") Book book);
+
+    /**
+     * 특정 책의 각 챕터별 글자수 조회 (마지막 이벤트의 endPos 사용)
+     */
+    @Query("SELECT c.idx, COALESCE(MAX(e.endPos), 0) FROM Chapter c " +
+           "LEFT JOIN c.events e WHERE c.book = :book " +
+           "GROUP BY c.idx ORDER BY c.idx")
+    List<Object[]> findChapterLengthsByBook(@Param("book") Book book);
 
 }

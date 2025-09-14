@@ -10,7 +10,7 @@ public class EventDTO {
 
     private Integer start;
     private Integer end;
-    private String text;
+    // text 필드 제거 (사용하지 않음)
 
     @JsonProperty("event_id")
     private Integer eventId;

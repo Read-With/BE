@@ -39,4 +39,14 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     @Modifying
     void deleteByChapter(Chapter chapter);
+
+    /**
+     * 특정 책의 각 챕터별 마지막 이벤트 조회 (거시 그래프용)
+     */
+    @Query("SELECT e FROM Event e JOIN e.chapter c " +
+           "WHERE e.book = :book AND c.idx <= :uptoChapter " +
+           "AND e.idx = (SELECT MAX(e2.idx) FROM Event e2 JOIN e2.chapter c2 " +
+           "WHERE e2.book = :book AND c2.idx = c.idx) " +
+           "ORDER BY c.idx ASC")
+    List<Event> findLastEventsByBookAndUptoChapter(@Param("book") Book book, @Param("uptoChapter") Integer uptoChapter);
 }
