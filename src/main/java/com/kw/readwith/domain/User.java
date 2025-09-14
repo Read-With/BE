@@ -43,14 +43,18 @@ public class User extends BaseEntity {
 
     /* 관계 : 업로드한 책, 읽기 상태 */
     @OneToMany(mappedBy = "uploadedBy", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Book> uploadedBooks = new ArrayList<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<UserReadState> readStates = new ArrayList<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Favorite> favorites = new ArrayList<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Bookmark> bookmarks = new ArrayList<>();
 }

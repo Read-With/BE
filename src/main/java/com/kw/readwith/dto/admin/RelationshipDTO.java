@@ -12,6 +12,5 @@ public class RelationshipDTO {
     private Long id2;
     private List<String> relation;
     private Double positivity;
-    private Double weight;
     private Integer count;
 }

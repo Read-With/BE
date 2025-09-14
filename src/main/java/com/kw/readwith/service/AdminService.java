@@ -22,8 +22,6 @@ import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -141,7 +139,7 @@ public class AdminService {
                                 .idx(dto.getEventId())
                                 .startPos(dto.getStart())
                                 .endPos(dto.getEnd())
-                                .rawText(dto.getText())
+                                .rawText("") // text 필드가 제거되어 빈 문자열로 설정
                                 .build())
                         .collect(Collectors.toList());
                 allNewEvents.addAll(newEventsFromFile);
@@ -300,6 +298,10 @@ public class AdminService {
                     .character(character)
                     .nodeWeight(weightDTO.getWeight())
                     .build();
+            
+            // EventCharacterStat에는 count 필드가 없으므로 로그만 출력
+            log.info("Character {} weight: {}, count: {} (count not stored in EventCharacterStat)", 
+                    character.getName(), weightDTO.getWeight(), weightDTO.getCount());
             newStats.add(stat);
         }
 

@@ -6,7 +6,7 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
-import com.kw.readwith.domain.mapping.ChapterRelationshipEdge;
+import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -14,7 +14,7 @@ import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.UserRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
-import com.kw.readwith.repository.ChapterRelationshipEdgeRepository;
+import com.kw.readwith.repository.EventCharacterStatRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -30,7 +30,7 @@ public class DataLoader implements CommandLineRunner {
     private final EventRepository eventRepository;
     private final CharacterRepository characterRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
-    private final ChapterRelationshipEdgeRepository chapterRelationshipEdgeRepository;
+    private final EventCharacterStatRepository eventCharacterStatRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -368,6 +368,7 @@ public class DataLoader implements CommandLineRunner {
                 .toCharacter(hagrid)
                 .event(event)
                 .sentimentScore(0.8f)  // Admin API의 positivity 필드
+                .interactionCount(2)  // Admin API의 count 필드
                 .relationTags("[\"care\", \"protection\"]")  // Admin API의 relation 필드 (JSON 문자열)
                 .build();
         eventRelationshipEdgeRepository.save(harryHagrid);
@@ -378,34 +379,50 @@ public class DataLoader implements CommandLineRunner {
                 .toCharacter(harry)
                 .event(event)
                 .sentimentScore(0.7f)
+                .interactionCount(2)
                 .relationTags("[\"mentorship\", \"guidance\"]")
                 .build();
         eventRelationshipEdgeRepository.save(hagridHarry);
 
-        // ChapterRelationshipEdge 누적 데이터 생성 (챕터 1 기준)
-        ChapterRelationshipEdge chapterEdge1 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(harry)
-                .toCharacter(hagrid)
-                .cumulativeInteraction(2)
-                .sentimentWeightedSum(1.6f)  // 0.8 * 2
-                .edgeColorHex("#4CAF50")  // 긍정적 관계 - 녹색
-                .edgeWidth(2.5f)
+        // 헤르미온느 - 론 관계 추가
+        EventRelationshipEdge hermioneRon = EventRelationshipEdge.builder()
+                .fromCharacter(hermione)
+                .toCharacter(ron)
+                .event(event)
+                .sentimentScore(0.6f)
+                .interactionCount(1)
+                .relationTags("[\"friendship\", \"study\"]")
                 .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge1);
+        eventRelationshipEdgeRepository.save(hermioneRon);
 
-        ChapterRelationshipEdge chapterEdge2 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(hagrid)
-                .toCharacter(harry)
-                .cumulativeInteraction(2)
-                .sentimentWeightedSum(1.4f)  // 0.7 * 2
-                .edgeColorHex("#4CAF50")
-                .edgeWidth(2.5f)
+        // 모든 캐릭터에 대한 EventCharacterStat 노드 중요도 데이터 생성
+        EventCharacterStat harryStat = EventCharacterStat.builder()
+                .event(event)
+                .character(harry)
+                .nodeWeight(6.5)  // 해리는 주인공이므로 높은 중요도
                 .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge2);
+        eventCharacterStatRepository.save(harryStat);
+
+        EventCharacterStat hermioneStat = EventCharacterStat.builder()
+                .event(event)
+                .character(hermione)
+                .nodeWeight(5.8)  // 헤르미온느는 주요 조연
+                .build();
+        eventCharacterStatRepository.save(hermioneStat);
+
+        EventCharacterStat ronStat = EventCharacterStat.builder()
+                .event(event)
+                .character(ron)
+                .nodeWeight(5.5)  // 론은 주요 조연
+                .build();
+        eventCharacterStatRepository.save(ronStat);
+
+        EventCharacterStat hagridStat = EventCharacterStat.builder()
+                .event(event)
+                .character(hagrid)
+                .nodeWeight(4.2)  // 해그리드는 조연이므로 중간 중요도
+                .build();
+        eventCharacterStatRepository.save(hagridStat);
     }
 
     /**
@@ -418,6 +435,7 @@ public class DataLoader implements CommandLineRunner {
                 .toCharacter(gandalf)
                 .event(event)
                 .sentimentScore(0.9f)
+                .interactionCount(3)  // Admin API의 count 필드
                 .relationTags("[\"trust\", \"guidance\", \"friendship\"]")
                 .build();
         eventRelationshipEdgeRepository.save(frodoGandalf);
@@ -428,33 +446,42 @@ public class DataLoader implements CommandLineRunner {
                 .toCharacter(frodo)
                 .event(event)
                 .sentimentScore(0.85f)
+                .interactionCount(3)
                 .relationTags("[\"protection\", \"mentorship\"]")
                 .build();
         eventRelationshipEdgeRepository.save(gandalfFrodo);
 
-        // ChapterRelationshipEdge 누적 데이터
-        ChapterRelationshipEdge chapterEdge1 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(frodo)
-                .toCharacter(gandalf)
-                .cumulativeInteraction(3)
-                .sentimentWeightedSum(2.7f)  // 0.9 * 3
-                .edgeColorHex("#2196F3")  // 신뢰 관계 - 파란색
-                .edgeWidth(3.0f)
-                .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge1);
-
-        ChapterRelationshipEdge chapterEdge2 = ChapterRelationshipEdge.builder()
-                .book(book)
-                .chapterIdx(1)
-                .fromCharacter(gandalf)
+        // 아라고른 - 프로도 관계 추가
+        EventRelationshipEdge aragornFrodo = EventRelationshipEdge.builder()
+                .fromCharacter(aragorn)
                 .toCharacter(frodo)
-                .cumulativeInteraction(3)
-                .sentimentWeightedSum(2.55f)  // 0.85 * 3
-                .edgeColorHex("#2196F3")
-                .edgeWidth(3.0f)
+                .event(event)
+                .sentimentScore(0.7f)
+                .interactionCount(1)
+                .relationTags("[\"protection\", \"duty\"]")
                 .build();
-        chapterRelationshipEdgeRepository.save(chapterEdge2);
+        eventRelationshipEdgeRepository.save(aragornFrodo);
+
+        // 모든 캐릭터에 대한 EventCharacterStat 노드 중요도 데이터 생성
+        EventCharacterStat frodoStat = EventCharacterStat.builder()
+                .event(event)
+                .character(frodo)
+                .nodeWeight(7.2)  // 프로도는 주인공이므로 높은 중요도
+                .build();
+        eventCharacterStatRepository.save(frodoStat);
+
+        EventCharacterStat gandalfStat = EventCharacterStat.builder()
+                .event(event)
+                .character(gandalf)
+                .nodeWeight(6.8)  // 간달프는 중요한 조력자
+                .build();
+        eventCharacterStatRepository.save(gandalfStat);
+
+        EventCharacterStat aragornStat = EventCharacterStat.builder()
+                .event(event)
+                .character(aragorn)
+                .nodeWeight(6.0)  // 아라고른은 중요한 왕족
+                .build();
+        eventCharacterStatRepository.save(aragornStat);
     }
-} 
+}

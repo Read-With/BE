@@ -20,4 +20,9 @@ public interface EventRelationshipEdgeRepository extends JpaRepository<EventRela
 
     boolean existsByEventAndFromCharacterAndToCharacter(Event event, Character fromCharacter, Character toCharacter);
 
+    /**
+     * 여러 이벤트의 관계 엣지 조회 (거시 그래프용)
+     */
+    List<EventRelationshipEdge> findByEventIn(List<Event> events);
+
 }

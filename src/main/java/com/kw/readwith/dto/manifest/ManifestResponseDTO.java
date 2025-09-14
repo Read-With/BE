@@ -23,4 +23,9 @@ public class ManifestResponseDTO {
      * 인물 목록
      */
     private List<CharacterManifestDTO> characters;
+    
+    /**
+     * Progress API 메타데이터
+     */
+    private ProgressMetadataDTO progressMetadata;
 }
