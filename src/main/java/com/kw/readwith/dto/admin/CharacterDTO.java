@@ -26,11 +26,4 @@ public class CharacterDTO {
 
     @JsonProperty("portrait_prompt")
     private String portraitPrompt;
-
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    public static class CharacterListDTO {
-        private List<CharacterDTO> characters;
-    }
 }
