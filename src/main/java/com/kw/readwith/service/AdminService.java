@@ -325,6 +325,11 @@ public class AdminService {
 
         List<EventRelationshipEdge> newEdges = new ArrayList<>();
         for (RelationshipDTO dto : relationDTOs) {
+            // 자기 자신과의 관계는 제외
+            if (dto.getId1().equals(dto.getId2())) {
+                continue;
+            }
+
             Character fromChar = characterRepository.findByBookAndCharacterId(book, dto.getId1())
                     .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "id1에 해당하는 캐릭터(ID: " + dto.getId1() + ")를 찾을 수 없습니다."));
             Character toChar = characterRepository.findByBookAndCharacterId(book, dto.getId2())
