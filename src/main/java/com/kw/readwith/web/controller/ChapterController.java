@@ -1,0 +1,34 @@
+package com.kw.readwith.web.controller;
+
+import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.dto.book.ChapterPovSummaryResponseDTO;
+import com.kw.readwith.service.CharacterPovSummaryService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/books")
+@RequiredArgsConstructor
+@Tag(name = "Chapter", description = "챕터 관련 API")
+public class ChapterController {
+
+    private final CharacterPovSummaryService characterPovSummaryService;
+
+    // 챕터당 각 인물별 시점요약 조회
+    @GetMapping("/{bookId}/chapters/{chapterIdx}/pov-summaries")
+    @Operation(summary = "챕터당 각 인물별 시점요약 조회", 
+               description = "특정 챕터에서 등장하는 각 인물의 시점에서 바라본 해당 챕터의 요약 정보를 조회합니다.")
+    public ApiResponse<ChapterPovSummaryResponseDTO> getChapterPovSummaries(
+            @Parameter(description = "책 ID", required = true)
+            @PathVariable Long bookId,
+            @Parameter(description = "챕터 인덱스 (1-based)", required = true)
+            @PathVariable Integer chapterIdx) {
+        
+        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        ChapterPovSummaryResponseDTO response = characterPovSummaryService.getChapterPovSummaries(bookId, chapterIdx, userId);
+        return ApiResponse.onSuccess(response);
+    }
+}
