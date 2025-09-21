@@ -7,6 +7,7 @@ import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
+import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -15,6 +16,7 @@ import com.kw.readwith.repository.EventRepository;
 import com.kw.readwith.repository.UserRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import com.kw.readwith.repository.EventCharacterStatRepository;
+import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -31,6 +33,7 @@ public class DataLoader implements CommandLineRunner {
     private final CharacterRepository characterRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final EventCharacterStatRepository eventCharacterStatRepository;
+    private final CharacterPovSummaryRepository characterPovSummaryRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -261,6 +264,9 @@ public class DataLoader implements CommandLineRunner {
         
         // EventRelationshipEdge 관계 데이터 추가 (Admin API 업로드 형태와 동일)
         createHarryPotterRelationships(book, savedEvent3, harry, hermione, ron, hagrid);
+        
+        // 챕터 시점요약 데이터 추가
+        createHarryPotterPovSummaries(book, savedChapter1, chapter2, chapter3, harry, hermione, ron, hagrid);
     }
 
     /**
@@ -356,6 +362,9 @@ public class DataLoader implements CommandLineRunner {
         
         // 반지의 제왕 관계 데이터 추가
         createLordOfTheRingsRelationships(book, event2, frodo, gandalf, aragorn);
+        
+        // 챕터 시점요약 데이터 추가
+        createLordOfTheRingsPovSummaries(book, savedChapter1, frodo, gandalf, aragorn);
     }
 
     /**
@@ -483,5 +492,115 @@ public class DataLoader implements CommandLineRunner {
                 .nodeWeight(6.0)  // 아라고른은 중요한 왕족
                 .build();
         eventCharacterStatRepository.save(aragornStat);
+    }
+
+    /**
+     * 해리포터 챕터 시점요약 데이터 생성
+     */
+    private void createHarryPotterPovSummaries(Book book, Chapter chapter1, Chapter chapter2, Chapter chapter3, 
+                                              Character harry, Character hermione, Character ron, Character hagrid) {
+        
+        // 1장: 살아남은 아이 - 각 인물별 시점요약
+        CharacterPovSummary harryChapter1 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter1)
+                .character(harry)
+                .summaryText("해리의 시점에서는 이 챕터에서 직접적인 경험은 없지만, 그의 운명이 결정되는 중요한 순간이다. " +
+                           "부모님을 잃고 더즐리 가족에게 맡겨지게 되는 비극적인 시작이지만, 동시에 마법 세계에서 '살아남은 아이'로 불리게 되는 전설의 시작이기도 하다.")
+                .build();
+        characterPovSummaryRepository.save(harryChapter1);
+
+        CharacterPovSummary hagridChapter1 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter1)
+                .character(hagrid)
+                .summaryText("해그리드의 시점에서 이 챕터는 깊은 슬픔과 책임감이 교차하는 순간이다. " +
+                           "제임스와 릴리 포터의 죽음을 목격하고, 아기 해리를 구출해 덤블도어에게 데려오는 중요한 임무를 수행한다. " +
+                           "해리에 대한 각별한 애정과 보호 의지가 시작되는 지점이다.")
+                .build();
+        characterPovSummaryRepository.save(hagridChapter1);
+
+        // 2장: 사라진 유리 - 각 인물별 시점요약  
+        CharacterPovSummary harryChapter2 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter2)
+                .character(harry)
+                .summaryText("해리의 시점에서 이 챕터는 자신의 특별한 능력을 처음 인식하게 되는 순간이다. " +
+                           "더즐리 가족의 냉대 속에서도 뱀과 대화할 수 있는 신비한 능력을 발견하며, " +
+                           "자신이 평범하지 않다는 것을 깨닫기 시작한다. 동물원에서의 사건은 그에게 혼란과 동시에 희망을 준다.")
+                .build();
+        characterPovSummaryRepository.save(harryChapter2);
+
+        CharacterPovSummary hermioneChapter2 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter2)
+                .character(hermione)
+                .summaryText("헤르미온느는 아직 해리와 만나지 않았지만, 이 시기 그녀는 호그와트 입학을 준비하며 " +
+                           "마법에 대한 모든 것을 열심히 공부하고 있었을 것이다. 머글 출신으로서 마법 세계에 대한 " +
+                           "강한 호기심과 학습 욕구로 가득 찬 시기였다.")
+                .build();
+        characterPovSummaryRepository.save(hermioneChapter2);
+
+        // 3장: 편지들 - 각 인물별 시점요약
+        CharacterPovSummary harryChapter3 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter3)
+                .character(harry)
+                .summaryText("해리의 시점에서 이 챕터는 자신의 정체성에 대한 진실이 조금씩 드러나는 흥미진진한 순간이다. " +
+                           "호그와트에서 온 편지들을 통해 자신이 마법사라는 사실을 알게 되고, " +
+                           "더즐리 가족이 숨겨온 진실들이 하나씩 밝혀지면서 새로운 세계에 대한 기대감이 커진다.")
+                .build();
+        characterPovSummaryRepository.save(harryChapter3);
+
+        CharacterPovSummary ronChapter3 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter3)
+                .character(ron)
+                .summaryText("론의 시점에서는 아직 해리와 만나지 않았지만, 위즐리 가족의 막내 아들로서 " +
+                           "호그와트 입학을 앞두고 설렘과 긴장감을 느끼고 있었을 것이다. " +
+                           "형들의 이야기를 들으며 호그와트 생활에 대한 기대와 걱정을 동시에 품고 있었다.")
+                .build();
+        characterPovSummaryRepository.save(ronChapter3);
+    }
+
+    /**
+     * 반지의 제왕 챕터 시점요약 데이터 생성
+     */
+    private void createLordOfTheRingsPovSummaries(Book book, Chapter chapter1, 
+                                                 Character frodo, Character gandalf, Character aragorn) {
+        
+        // 1장: 오랫동안 기다려온 파티 - 각 인물별 시점요약
+        CharacterPovSummary frodoChapter1 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter1)
+                .character(frodo)
+                .summaryText("프로도의 시점에서 이 챕터는 평온한 샤이어 생활의 마지막 순간들이다. " +
+                           "빌보 삼촌의 생일 파티를 준비하며 일상적인 호빗의 삶을 즐기고 있지만, " +
+                           "빌보의 갑작스러운 실종과 반지에 대한 이야기를 듣게 되면서 " +
+                           "자신의 운명이 바뀔 것임을 예감하기 시작한다.")
+                .build();
+        characterPovSummaryRepository.save(frodoChapter1);
+
+        CharacterPovSummary gandalfChapter1 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter1)
+                .character(gandalf)
+                .summaryText("간달프의 시점에서 이 챕터는 오랫동안 품어온 의심이 확신으로 바뀌는 중요한 순간이다. " +
+                           "빌보가 가진 반지가 정말로 '하나의 반지'임을 확신하게 되고, " +
+                           "이제 프로도에게 진실을 알려주고 위험한 여정을 시작해야 할 때가 왔음을 깨닫는다. " +
+                           "마법사로서의 책임감과 걱정이 교차하는 복잡한 심경이다.")
+                .build();
+        characterPovSummaryRepository.save(gandalfChapter1);
+
+        CharacterPovSummary aragornChapter1 = CharacterPovSummary.builder()
+                .book(book)
+                .chapter(chapter1)
+                .character(aragorn)
+                .summaryText("아라고른의 시점에서는 아직 프로도와 직접적인 만남은 없지만, " +
+                           "레인저로서 샤이어 주변을 순찰하며 어둠의 세력들의 움직임을 감지하고 있다. " +
+                           "곤도르의 왕위 계승자로서의 숨겨진 정체성과 함께, " +
+                           "중간계를 지켜야 할 사명감을 품고 있는 시기이다.")
+                .build();
+        characterPovSummaryRepository.save(aragornChapter1);
     }
 }
