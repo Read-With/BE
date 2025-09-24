@@ -9,24 +9,19 @@ import java.util.List;
 @Getter
 @NoArgsConstructor
 public class CharacterDTO {
+
+    private Long id;
+
     @JsonProperty("common_name")
-    private String common_name;
-    
-    @JsonProperty("portrait_prompt")
-    private String portrait_prompt;
-    
-    @JsonProperty("main_character")
-    private boolean main_character;
-    
-    private String description;
-    
-    private Double id;
-    
+    private String commonName;
+
     private List<String> names;
 
-    @Getter
-    @NoArgsConstructor
-    public static class CharacterListDTO {
-        private List<CharacterDTO> characters;
-    }
+    @JsonProperty("main_character")
+    private boolean isMainCharacter;
+
+    private String description;
+
+    @JsonProperty("portrait_prompt")
+    private String portraitPrompt;
 }

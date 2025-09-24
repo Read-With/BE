@@ -23,5 +23,5 @@ public interface CharacterPovSummaryRepository extends JpaRepository<CharacterPo
 
     boolean existsByChapter(Chapter chapter);
 
-    void deleteByChapter(Chapter chapter);
+    int deleteByChapter(Chapter chapter);
 }

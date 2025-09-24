@@ -16,7 +16,7 @@ public interface EventRelationshipEdgeRepository extends JpaRepository<EventRela
      */
     List<EventRelationshipEdge> findByEvent(Event event);
 
-    void deleteByEvent(Event event);
+    int deleteByEvent(Event event);
 
     boolean existsByEventAndFromCharacterAndToCharacter(Event event, Character fromCharacter, Character toCharacter);
 
