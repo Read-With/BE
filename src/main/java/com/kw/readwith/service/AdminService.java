@@ -459,10 +459,27 @@ public class AdminService {
         Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
 
-        if (!eventRelationshipEdgeRepository.existsByEvent(event)) {
-            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE);
+        // 삭제할 데이터가 있는지 확인
+        boolean edgesExist = eventRelationshipEdgeRepository.existsByEvent(event);
+        boolean statsExist = statRepository.existsByEvent(event);
+
+        if (!edgesExist && !statsExist) {
+            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE, "해당 이벤트에 삭제할 관계 정보가 없습니다.");
         }
-        return eventRelationshipEdgeRepository.deleteByEvent(event);
+
+        int deletedCount = 0;
+
+        // EventRelationshipEdge 데이터 삭제
+        if (edgesExist) {
+            deletedCount += eventRelationshipEdgeRepository.deleteByEvent(event);
+        }
+
+        // EventCharacterStat 데이터 삭제
+        if (statsExist) {
+            deletedCount += statRepository.deleteByEvent(event);
+        }
+
+        return deletedCount;
     }
 
     /*
