@@ -46,17 +46,23 @@ public class SecurityConfig {
                         // 공개 엔드포인트
                         .requestMatchers(
                                 "/",
-                                "/api/books/**",  // 책 목록은 비로그인도 접근 가능
-                                "/oauth2/**",
-                                "/login/**",
-                                "/auth/**",
+                                "/api/books/**",  // 책 목록은 비로그인도 접근 가능 (GET만)
+                                "/api/auth/google/**",  // Google 로그인
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/favicon.ico",
-                                "/error"
+                                "/error",
+                                "/actuator/health"  // 헬스체크
                         ).permitAll()
+                        // 인증이 필요한 엔드포인트
+                        .requestMatchers(
+                                "/api/auth/**",     // 인증 관련 API (토큰 갱신, 로그아웃 등)
+                                "/api/progress/**", // 진도 관리
+                                "/api/bookmarks/**", // 북마크
+                                "/api/favorites/**"  // 즐겨찾기
+                        ).authenticated()
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )
@@ -68,6 +74,16 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler)
+                )
+                
+                // 보안 헤더 설정
+                .headers(headers -> headers
+                        .frameOptions().deny()  // X-Frame-Options: DENY
+                        .contentTypeOptions().and()  // X-Content-Type-Options: nosniff
+                        .httpStrictTransportSecurity(hstsConfig -> hstsConfig
+                                .maxAgeInSeconds(31536000)  // 1년
+                                .includeSubdomains(true)
+                        )
                 );
 
         return http.build();

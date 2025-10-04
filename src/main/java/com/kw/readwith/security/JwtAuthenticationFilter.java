@@ -33,27 +33,57 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = extractTokenFromRequest(request);
 
-        if (token != null && jwtUtil.validateToken(token)) {
+        if (token != null) {
             try {
+                // 토큰 유효성 검증
+                if (!jwtUtil.validateToken(token)) {
+                    log.warn("Invalid JWT token");
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                // 토큰 만료 확인
+                if (jwtUtil.isTokenExpired(token)) {
+                    log.warn("Expired JWT token");
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
                 // Access Token인지 확인
                 String tokenType = jwtUtil.getTokenType(token);
-                if ("access".equals(tokenType)) {
-                    Long userId = jwtUtil.getUserIdFromToken(token);
-                    String email = jwtUtil.getEmailFromToken(token);
-
-                    // Authentication 객체 생성
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userId,
-                                    null,
-                                    Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
-                            );
-                    
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    
-                    log.debug("JWT Authentication successful for user: {}", userId);
+                if (!"access".equals(tokenType)) {
+                    log.warn("Invalid token type: {}", tokenType);
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
                 }
+
+                Long userId = jwtUtil.getUserIdFromToken(token);
+                String email = jwtUtil.getEmailFromToken(token);
+
+                // 사용자 ID와 이메일 검증
+                if (userId == null || email == null || email.isBlank()) {
+                    log.warn("Invalid user information in token");
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                // Authentication 객체 생성
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userId,
+                                null,
+                                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+                        );
+                
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+                
+                log.debug("JWT Authentication successful for user: {}", userId);
+                
             } catch (Exception e) {
                 log.error("JWT Authentication failed: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
