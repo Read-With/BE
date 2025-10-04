@@ -57,4 +57,18 @@ public class User extends BaseEntity {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     @Builder.Default
     private List<Bookmark> bookmarks = new ArrayList<>();
+
+    /* 비즈니스 메서드 */
+    public void updateJwtRefreshToken(String refreshToken) {
+        this.jwtRefreshToken = refreshToken;
+    }
+
+    public void updateProfile(String nickname, String profileImgUrl) {
+        if (nickname != null && !nickname.isBlank()) {
+            this.nickname = nickname;
+        }
+        if (profileImgUrl != null && !profileImgUrl.isBlank()) {
+            this.profileImgUrl = profileImgUrl;
+        }
+    }
 }
