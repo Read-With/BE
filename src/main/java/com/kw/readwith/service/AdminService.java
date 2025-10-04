@@ -164,7 +164,7 @@ public class AdminService {
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         List<CharacterPovSummary> allNewSummaries = new ArrayList<>();
-        Pattern pattern = Pattern.compile("chapter(\\d+)_perspective_summaries\\.json");
+        Pattern pattern = Pattern.compile("chapter(\\d+)_perspective_summaries_Ko\\.json");
 
         for (MultipartFile summaryFile : summaryFiles) {
             String filename = summaryFile.getOriginalFilename();
