@@ -2,12 +2,15 @@ package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
 import com.kw.readwith.domain.User;
+import com.kw.readwith.dto.auth.GoogleLoginRequestDTO;
 import com.kw.readwith.dto.auth.TokenResponseDTO;
 import com.kw.readwith.dto.auth.UserInfoResponseDTO;
 import com.kw.readwith.service.GoogleOAuth2Service;
 import com.kw.readwith.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,13 +29,35 @@ public class GoogleAuthController {
     private final JwtUtil jwtUtil;
 
     @PostMapping
-    @Operation(summary = "Google OAuth2 로그인", description = "Google OAuth2 인증 코드를 사용하여 로그인합니다.")
+    @Operation(
+        summary = "Google OAuth2 로그인", 
+        description = "Google OAuth2 인증 코드를 사용하여 로그인합니다."
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200", 
+            description = "로그인 성공",
+            content = @Content(schema = @Schema(implementation = TokenResponseDTO.class))
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "400", 
+            description = "잘못된 요청 (인증 코드 누락 또는 유효하지 않음)"
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "401", 
+            description = "Google 인증 실패"
+        )
+    })
     public ApiResponse<TokenResponseDTO> googleLogin(
-            @Parameter(description = "Google OAuth2 인증 코드", required = true)
-            @RequestBody Map<String, String> request) {
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Google OAuth2 인증 코드",
+                required = true,
+                content = @Content(schema = @Schema(implementation = GoogleLoginRequestDTO.class))
+            )
+            @RequestBody GoogleLoginRequestDTO request) {
         
         try {
-            String authorizationCode = request.get("code");
+            String authorizationCode = request.getCode();
             if (authorizationCode == null || authorizationCode.isBlank()) {
                 return ApiResponse.onFailure("AUTH4001", "인증 코드가 필요합니다.", null);
             }

@@ -52,6 +52,11 @@ public class GoogleOAuth2Service {
     private String getAccessToken(String authorizationCode) {
         String tokenUrl = "https://oauth2.googleapis.com/token";
         
+        log.info("Google 액세스 토큰 요청 시작");
+        log.info("Client ID: {}", clientId != null ? clientId.substring(0, Math.min(10, clientId.length())) + "..." : "null");
+        log.info("Redirect URI: {}", redirectUri);
+        log.info("Authorization Code: {}", authorizationCode != null ? authorizationCode.substring(0, Math.min(10, authorizationCode.length())) + "..." : "null");
+        
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("code", authorizationCode);
         params.add("client_id", clientId);
@@ -68,14 +73,19 @@ public class GoogleOAuth2Service {
             ResponseEntity<Map> response = restTemplate.postForEntity(tokenUrl, request, Map.class);
             Map<String, Object> responseBody = response.getBody();
             
+            log.info("Google 응답 상태: {}", response.getStatusCode());
+            log.info("Google 응답 본문: {}", responseBody);
+            
             if (responseBody != null && responseBody.containsKey("access_token")) {
+                log.info("액세스 토큰 획득 성공");
                 return (String) responseBody.get("access_token");
             } else {
-                throw new RuntimeException("액세스 토큰을 받을 수 없습니다.");
+                log.error("응답에 access_token이 없습니다. 응답: {}", responseBody);
+                throw new RuntimeException("액세스 토큰을 받을 수 없습니다. 응답: " + responseBody);
             }
         } catch (Exception e) {
-            log.error("Google 액세스 토큰 요청 실패: {}", e.getMessage());
-            throw new RuntimeException("Google 인증에 실패했습니다.", e);
+            log.error("Google 액세스 토큰 요청 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("Google 인증에 실패했습니다: " + e.getMessage(), e);
         }
     }
 

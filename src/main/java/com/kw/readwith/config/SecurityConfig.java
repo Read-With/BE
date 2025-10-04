@@ -78,11 +78,11 @@ public class SecurityConfig {
                 
                 // 보안 헤더 설정
                 .headers(headers -> headers
-                        .frameOptions().deny()  // X-Frame-Options: DENY
-                        .contentTypeOptions().and()  // X-Content-Type-Options: nosniff
+                        .frameOptions(frameOptions -> frameOptions.deny())  // X-Frame-Options: DENY
+                        .contentTypeOptions(contentTypeOptions -> contentTypeOptions.disable())  // X-Content-Type-Options: nosniff
                         .httpStrictTransportSecurity(hstsConfig -> hstsConfig
                                 .maxAgeInSeconds(31536000)  // 1년
-                                .includeSubdomains(true)
+                                .includeSubDomains(true)
                         )
                 );
 
