@@ -1,6 +1,8 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.apiPayload.code.status.ErrorStatus;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.graph.FineGraphResponseDTO;
 import com.kw.readwith.dto.graph.MacroGraphResponseDTO;
 import com.kw.readwith.service.FineGraphService;
@@ -9,6 +11,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,6 +23,14 @@ public class GraphController {
 
     private final FineGraphService fineGraphService;
     private final MacroGraphService macroGraphService;
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        throw new GeneralException(ErrorStatus._UNAUTHORIZED);
+    }
 
     /**
      * 세밀(이벤트) 그래프 조회
@@ -36,7 +48,7 @@ public class GraphController {
             @Parameter(description = "이벤트 인덱스", required = true, example = "3")
             @RequestParam Integer eventIdx) {
 
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         FineGraphResponseDTO response = fineGraphService.getFineGraph(bookId, chapterIdx, eventIdx, userId);
         return ApiResponse.onSuccess(response);
     }
@@ -55,7 +67,7 @@ public class GraphController {
             @Parameter(description = "조회할 마지막 챕터 인덱스", required = true, example = "3")
             @RequestParam Integer uptoChapter) {
 
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         MacroGraphResponseDTO response = macroGraphService.getMacroGraph(bookId, uptoChapter, userId);
         return ApiResponse.onSuccess(response);
     }
