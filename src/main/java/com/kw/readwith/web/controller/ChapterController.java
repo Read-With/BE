@@ -1,12 +1,16 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.apiPayload.code.status.ErrorStatus;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.book.ChapterPovSummaryResponseDTO;
 import com.kw.readwith.service.CharacterPovSummaryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,6 +20,14 @@ import org.springframework.web.bind.annotation.*;
 public class ChapterController {
 
     private final CharacterPovSummaryService characterPovSummaryService;
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        throw new GeneralException(ErrorStatus._UNAUTHORIZED);
+    }
 
     // 챕터당 각 인물별 시점요약 조회
     @GetMapping("/{bookId}/chapters/{chapterIdx}/pov-summaries")
@@ -27,7 +39,7 @@ public class ChapterController {
             @Parameter(description = "챕터 인덱스 (1-based)", required = true)
             @PathVariable Integer chapterIdx) {
         
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         ChapterPovSummaryResponseDTO response = characterPovSummaryService.getChapterPovSummaries(bookId, chapterIdx, userId);
         return ApiResponse.onSuccess(response);
     }

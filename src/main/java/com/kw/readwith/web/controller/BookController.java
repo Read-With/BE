@@ -1,11 +1,15 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.apiPayload.code.status.ErrorStatus;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.service.BookService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,6 +25,14 @@ public class BookController {
 
     private final BookService bookService;
 
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        throw new GeneralException(ErrorStatus._UNAUTHORIZED);
+    }
+
     // 도서 목록 조회
     @GetMapping
     @Operation(summary = "도서 목록 조회", description = "검색/필터/정렬 파라미터를 이용해 도서 목록을 반환합니다.")
@@ -30,7 +42,7 @@ public class BookController {
             @RequestParam(defaultValue = "updatedAt") String sort,
             @RequestParam(required = false) Boolean favorite
     ) {
-        Long userId = 1L; // TODO 인증된 사용자
+        Long userId = getCurrentUserId();
         List<BookSummaryDTO> response = bookService.getBooks(q, language, favorite, sort, userId);
         return ApiResponse.onSuccess(response);
     }
@@ -39,7 +51,7 @@ public class BookController {
     @GetMapping("/{bookId}")
     @Operation(summary = "단일 도서 조회", description = "도서 ID로 단일 도서를 조회합니다.")
     public ApiResponse<BookDetailDTO> getBook(@PathVariable Long bookId) {
-        Long userId = 1L; // TODO 인증된 사용자
+        Long userId = getCurrentUserId();
         BookDetailDTO response = bookService.getBook(bookId, userId);
         return ApiResponse.onSuccess(response);
     }
@@ -51,7 +63,7 @@ public class BookController {
                                                     @RequestPart("title") String title,
                                                     @RequestPart("author") String author,
                                                     @RequestPart("language") String language) {
-        Long userId = 1L; // TODO 인증된 사용자
+        Long userId = getCurrentUserId();
         BookDetailDTO response = bookService.uploadBook(userId, file, title, author, language);
         return ApiResponse.onSuccess(response);
     }

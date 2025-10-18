@@ -1,6 +1,8 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.apiPayload.code.status.ErrorStatus;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.bookmark.BookmarkResponseDTO;
 import com.kw.readwith.dto.bookmark.CreateBookmarkRequestDTO;
 import com.kw.readwith.dto.bookmark.UpdateBookmarkRequestDTO;
@@ -10,6 +12,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +26,14 @@ public class BookmarkController {
 
     private final BookmarkService bookmarkService;
 
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        throw new GeneralException(ErrorStatus._UNAUTHORIZED);
+    }
+
     /**
      * 북마크 목록 조회
      */
@@ -33,7 +45,7 @@ public class BookmarkController {
             @Parameter(description = "정렬 방식 (time_desc: 최신순, time_asc: 오래된순)", example = "time_desc")
             @RequestParam(defaultValue = "time_desc") String sort) {
         
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         List<BookmarkResponseDTO> bookmarks = bookmarkService.getBookmarks(userId, bookId, sort);
         return ApiResponse.onSuccess(bookmarks);
     }
@@ -46,7 +58,7 @@ public class BookmarkController {
     public ApiResponse<BookmarkResponseDTO> createBookmark(
             @Valid @RequestBody CreateBookmarkRequestDTO requestDTO) {
         
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         BookmarkResponseDTO bookmark = bookmarkService.createBookmark(userId, requestDTO);
         return ApiResponse.onSuccess(bookmark);
     }
@@ -61,7 +73,7 @@ public class BookmarkController {
             @PathVariable Long bookmarkId,
             @Valid @RequestBody UpdateBookmarkRequestDTO requestDTO) {
         
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         BookmarkResponseDTO bookmark = bookmarkService.updateBookmark(userId, bookmarkId, requestDTO);
         return ApiResponse.onSuccess(bookmark);
     }
@@ -75,7 +87,7 @@ public class BookmarkController {
             @Parameter(description = "북마크 ID", required = true)
             @PathVariable Long bookmarkId) {
         
-        Long userId = 1L; // TODO: 실제 인증된 사용자 ID로 교체
+        Long userId = getCurrentUserId();
         bookmarkService.deleteBookmark(userId, bookmarkId);
         return ApiResponse.onSuccess(null);
     }
