@@ -12,4 +12,8 @@ import java.util.Optional;
 public interface EventCharacterStatRepository extends JpaRepository<EventCharacterStat, Long> {
 
     Optional<EventCharacterStat> findByEventAndCharacter(Event event, Character character);
+
+    boolean existsByEvent(Event event);
+
+    int deleteByEvent(Event event);
 }

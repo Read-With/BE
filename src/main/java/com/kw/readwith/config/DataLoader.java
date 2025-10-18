@@ -335,7 +335,7 @@ public class DataLoader implements CommandLineRunner {
                 .endPos(12000)
                 .rawText("간달프가 프로도에게 반지의 진실을 말해주었다...")
                 .summaryText("간달프가 반지가 사우론의 절대반지임을 밝히고, 프로도가 반지를 파괴해야 함을 알게 된다.")
-                .povSummariesCached(true)
+                .povSummariesCached(false)
                 .build();
         chapterRepository.save(chapter2);
 

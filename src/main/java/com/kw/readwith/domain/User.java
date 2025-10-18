@@ -2,10 +2,12 @@ package com.kw.readwith.domain;
 
 import com.kw.readwith.domain.common.BaseEntity;
 import com.kw.readwith.domain.enums.Provider;
+import com.kw.readwith.domain.enums.Role;
 import com.kw.readwith.domain.mapping.UserReadState;
 import com.kw.readwith.domain.mapping.Favorite;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +39,10 @@ public class User extends BaseEntity {
 
     @Column(name = "profile_img_url", length = 255)
     private String profileImgUrl;
+
+    @Column(name = "is_admin", nullable = false)
+    @ColumnDefault("false")
+    private boolean isAdmin;
 
     @Column(name = "jwt_refresh_token", columnDefinition = "CHAR(128)")
     private String jwtRefreshToken;
@@ -70,5 +76,9 @@ public class User extends BaseEntity {
         if (profileImgUrl != null && !profileImgUrl.isBlank()) {
             this.profileImgUrl = profileImgUrl;
         }
+    }
+
+    public Role getRole() {
+        return this.isAdmin ? Role.ADMIN : Role.USER;
     }
 }

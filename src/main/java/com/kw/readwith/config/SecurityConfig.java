@@ -34,13 +34,13 @@ public class SecurityConfig {
         http
                 // CSRF 비활성화 (JWT 사용)
                 .csrf(AbstractHttpConfigurer::disable)
-                
+
                 // CORS 설정
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                
+
                 // 세션 비활성화 (JWT 사용)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                
+
                 // 요청 권한 설정
                 .authorizeHttpRequests(auth -> auth
                         // 공개 엔드포인트
@@ -63,19 +63,22 @@ public class SecurityConfig {
                                 "/api/bookmarks/**", // 북마크
                                 "/api/favorites/**"  // 즐겨찾기
                         ).authenticated()
+
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN") // 관리자
+
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )
-                
+
                 // JWT 필터 추가
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                
+
                 // 예외 처리 설정
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
-                
+
                 // 보안 헤더 설정
                 .headers(headers -> headers
                         .frameOptions(frameOptions -> frameOptions.deny())  // X-Frame-Options: DENY
@@ -92,25 +95,25 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
+
         // 허용할 오리진 설정
         configuration.setAllowedOriginPatterns(List.of("*"));
-        
+
         // 허용할 HTTP 메서드
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        
+
         // 허용할 헤더
         configuration.setAllowedHeaders(List.of("*"));
-        
+
         // 인증 정보 포함 허용
         configuration.setAllowCredentials(true);
-        
+
         // 노출할 헤더 설정
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-        
+
         return source;
     }
 
