@@ -3,6 +3,7 @@ package com.kw.readwith.domain;
 import com.kw.readwith.domain.cache.ChapterCharacterStat;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.common.BaseEntity;
+import com.kw.readwith.domain.enums.ImageGenerationStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -38,6 +39,10 @@ public class Character extends BaseEntity {
 
     @Column(name = "profile_image", length = 255)
     private String profileImage;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "image_generation_status", length = 20)
+    private ImageGenerationStatus imageGenerationStatus;
 
     @Column(nullable = false)
     private boolean isMainCharacter;
