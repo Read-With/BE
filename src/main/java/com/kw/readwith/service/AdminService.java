@@ -9,6 +9,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
+import com.kw.readwith.domain.enums.ImageGenerationStatus;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
@@ -86,6 +87,7 @@ public class AdminService {
                             .isMainCharacter(dto.isMainCharacter())
                             .personalityText(dto.getDescription())
                             .profileText(dto.getPortraitPrompt())
+                            .imageGenerationStatus(ImageGenerationStatus.PENDING)
                             .build();
                     newCharacters.add(character);
                 }
