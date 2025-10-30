@@ -28,5 +28,17 @@ public class CharacterImageProperties {
      * S3에 이미지를 저장할 경로 (버킷 내 디렉토리)
      */
     private String s3Path;
+
+    /**
+     * OpenAI API Rate Limit 방지를 위한 요청 간 대기 시간 (밀리초)
+     * 기본값: 2000ms (2초)
+     */
+    private long delayBetweenRequestsMs = 2000;
+
+    /**
+     * 한 번에 처리할 배치 크기
+     * 기본값: 10명
+     */
+    private int batchSize = 10;
 }
 
