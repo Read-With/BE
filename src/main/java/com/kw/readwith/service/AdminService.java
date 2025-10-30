@@ -123,7 +123,13 @@ public class AdminService {
 
             Integer chapterIdx = Integer.parseInt(matcher.group(1));
             Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "챕터 인덱스 " + chapterIdx + "를 찾을 수 없습니다."));
+                    .orElseGet(() -> {
+                        Chapter newChapter = Chapter.builder()
+                                .book(book)
+                                .idx(chapterIdx)
+                                .build();
+                        return chapterRepository.save(newChapter);
+                    });
 
             // 이미 데이터가 있는 챕터는 업로드 불가
             if (eventRepository.existsByChapter(chapter)) {
