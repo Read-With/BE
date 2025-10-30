@@ -44,6 +44,16 @@ spring:
             token-uri: https://oauth2.googleapis.com/token
             user-info-uri: https://www.googleapis.com/oauth2/v2/userinfo
             user-name-attribute: email
+  # Spring AI - OpenAI 설정
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      image:
+        options:
+          model: dall-e-3
+          size: 1024x1024
+          quality: standard
+          n: 1
 
 # JWT 설정
 jwt:
@@ -69,3 +79,9 @@ cloud:
     path:
       original: original
       metadata: metadata
+
+# 캐릭터 이미지 생성 설정
+character-image:
+  fallback-url: https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/default-character.jpg
+  common-style: "Bust portrait, square composition, face centered occupying about 60–70% of the frame, eye-level perspective. Illustrative realism style — between realism and comic illustration. Clean ink linework with subtle cross-hatching, soft vintage brush shading. Warm beige or off-white paper background with light paper grain texture. Muted brown and sepia tone palette with one gentle accent color (e.g., blue or teal tie or accessory). Lighting soft and even, no harsh contrast or shine. Mid-20th-century magazine illustration feel, timeless and calm mood. Not photorealistic, not cartoonish — balanced in between. No modern objects, no glossy digital effects, no HDR, no text or UI elements."
+  s3-path: character-images

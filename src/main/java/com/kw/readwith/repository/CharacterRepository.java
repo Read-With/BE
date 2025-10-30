@@ -31,4 +31,11 @@ public interface CharacterRepository extends JpaRepository<Character, Long> {
 
     @Modifying
     int deleteByBook(Book book);
+
+    /**
+     * 캐릭터의 프로필 이미지 URL 업데이트
+     */
+    @Modifying
+    @Query("UPDATE Character c SET c.profileImage = :imageUrl WHERE c.id = :characterId")
+    void updateProfileImage(@Param("characterId") Long characterId, @Param("imageUrl") String imageUrl);
 }
