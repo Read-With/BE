@@ -32,15 +32,12 @@ public class GoogleOAuth2Service {
     @Value("${spring.security.oauth2.client.registration.google.client-secret}")
     private String clientSecret;
 
-    @Value("${spring.security.oauth2.client.registration.google.redirect-uri}")
-    private String redirectUri;
-
     /**
      * Google OAuth2 인증 코드로 사용자 정보 가져오기 및 사용자 생성/업데이트
      */
-    public User authenticateWithGoogle(String authorizationCode) {
-        // 1. 인증 코드로 액세스 토큰 요청
-        String accessToken = getAccessToken(authorizationCode);
+    public User authenticateWithGoogle(String authorizationCode, String frontendRedirectUri) {
+        // 1. 인증 코드로 액세스 토큰 요청 (프론트엔드가 사용한 redirectUri 전달)
+        String accessToken = getAccessToken(authorizationCode, frontendRedirectUri);
         
         // 2. 액세스 토큰으로 사용자 정보 요청
         OAuth2UserInfo userInfo = getUserInfo(accessToken);
@@ -49,19 +46,19 @@ public class GoogleOAuth2Service {
         return findOrCreateUser(userInfo);
     }
 
-    private String getAccessToken(String authorizationCode) {
+    private String getAccessToken(String authorizationCode, String frontendRedirectUri) {
         String tokenUrl = "https://oauth2.googleapis.com/token";
         
         log.info("Google 액세스 토큰 요청 시작");
         log.info("Client ID: {}", clientId != null ? clientId.substring(0, Math.min(10, clientId.length())) + "..." : "null");
-        log.info("Redirect URI: {}", redirectUri);
+        log.info("Redirect URI: {}", frontendRedirectUri);
         log.info("Authorization Code: {}", authorizationCode != null ? authorizationCode.substring(0, Math.min(10, authorizationCode.length())) + "..." : "null");
         
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("code", authorizationCode);
         params.add("client_id", clientId);
         params.add("client_secret", clientSecret);
-        params.add("redirect_uri", redirectUri);
+        params.add("redirect_uri", frontendRedirectUri);  // 프론트엔드가 사용한 URI
         params.add("grant_type", "authorization_code");
 
         HttpHeaders headers = new HttpHeaders();
