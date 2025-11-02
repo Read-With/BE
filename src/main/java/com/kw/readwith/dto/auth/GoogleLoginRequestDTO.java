@@ -13,4 +13,9 @@ public class GoogleLoginRequestDTO {
             example = "4/0AVGzR1C2L_Wm4VjatrKl3S2cjMUkm6gpkJ6aupz1jbDYuRDyHjtNovgPuygz5l2vFzM11A",
             required = true)
     private String code;
+    
+    @Schema(description = "프론트엔드에서 사용한 redirect URI", 
+            example = "http://localhost:5173/auth/callback",
+            required = true)
+    private String redirectUri;
 }
