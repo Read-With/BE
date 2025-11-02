@@ -41,12 +41,12 @@ public class CharacterImageService {
      * 여러 캐릭터의 이미지를 비동기로 생성
      * 배치 단위로 처리하며, Rate Limit 방지를 위해 요청 간 딜레이 적용
      * 
-     * @param characters 이미지를 생성할 캐릭터 리스트
+     * @param characterIds 이미지를 생성할 캐릭터 ID 리스트
      * @return 비동기 작업 결과
      */
     @Async("imageGenerationExecutor")
-    public CompletableFuture<Void> generateImagesAsync(List<Character> characters) {
-        int totalCount = characters.size();
+    public CompletableFuture<Void> generateImagesAsync(List<Long> characterIds) {
+        int totalCount = characterIds.size();
         log.info("캐릭터 이미지 생성 시작 - 총 {}명 (배치 크기: {}명)", 
             totalCount, imageProperties.getBatchSize());
         
@@ -55,11 +55,15 @@ public class CharacterImageService {
         int failedCount = 0;
         int skippedCount = 0;
         
-        for (int i = 0; i < characters.size(); i++) {
-            Character character = characters.get(i);
+        for (int i = 0; i < characterIds.size(); i++) {
+            Long characterId = characterIds.get(i);
             processedCount++;
             
             try {
+                // 엔티티를 fetch join으로 재조회 (Book도 함께 로딩)
+                Character character = characterRepository.findByIdWithBook(characterId)
+                        .orElseThrow(() -> new RuntimeException("캐릭터를 찾을 수 없습니다: " + characterId));
+                
                 // 이미 이미지가 있거나 생성 완료된 경우 스킵
                 if (character.getProfileImage() != null && !character.getProfileImage().isEmpty() 
                     && character.getImageGenerationStatus() == ImageGenerationStatus.COMPLETED) {
@@ -70,19 +74,19 @@ public class CharacterImageService {
                 }
 
                 // 상태를 PENDING으로 설정
-                transactionService.updateStatus(character.getId(), ImageGenerationStatus.PENDING);
+                transactionService.updateStatus(characterId, ImageGenerationStatus.PENDING);
                 
                 log.info("[{}/{}] 캐릭터 '{}' 이미지 생성 시작...", 
                     processedCount, totalCount, character.getName());
                 
-                generateAndSaveImage(character);
+                generateAndSaveImage(characterId);
                 successCount++;
                 
                 log.info("[{}/{}] 캐릭터 '{}' 이미지 생성 완료 ✓", 
                     processedCount, totalCount, character.getName());
                 
                 // Rate Limit 방지: 마지막 캐릭터가 아니면 딜레이 적용
-                if (i < characters.size() - 1) {
+                if (i < characterIds.size() - 1) {
                     long delay = imageProperties.getDelayBetweenRequestsMs();
                     log.debug("다음 요청까지 {}ms 대기...", delay);
                     Thread.sleep(delay);
@@ -95,15 +99,15 @@ public class CharacterImageService {
                 }
                 
             } catch (InterruptedException e) {
-                log.error("캐릭터 '{}' 처리 중 인터럽트 발생", character.getName(), e);
+                log.error("캐릭터 ID {} 처리 중 인터럽트 발생", characterId, e);
                 Thread.currentThread().interrupt();
                 failedCount++;
-                saveFallbackImage(character);
+                saveFallbackImage(characterId);
                 break; // 인터럽트 시 중단
             } catch (Exception e) {
-                log.error("캐릭터 '{}' 이미지 생성 실패: {}", character.getName(), e.getMessage(), e);
+                log.error("캐릭터 ID {} 이미지 생성 실패: {}", characterId, e.getMessage(), e);
                 failedCount++;
-                saveFallbackImage(character);
+                saveFallbackImage(characterId);
             }
         }
         
@@ -119,15 +123,19 @@ public class CharacterImageService {
     /**
      * 단일 캐릭터의 이미지를 생성하고 저장
      * 
-     * @param character 이미지를 생성할 캐릭터
+     * @param characterId 이미지를 생성할 캐릭터 ID
      */
     @Transactional
-    public void generateAndSaveImage(Character character) {
+    public void generateAndSaveImage(Long characterId) {
+        // 엔티티를 fetch join으로 재조회 (Book도 함께 로딩)
+        Character character = characterRepository.findByIdWithBook(characterId)
+                .orElseThrow(() -> new RuntimeException("캐릭터를 찾을 수 없습니다: " + characterId));
+        
         log.info("캐릭터 '{}' 이미지 생성 시작", character.getName());
 
         try {
             // 상태를 GENERATING으로 변경
-            transactionService.updateStatus(character.getId(), ImageGenerationStatus.GENERATING);
+            transactionService.updateStatus(characterId, ImageGenerationStatus.GENERATING);
 
             // 1. 프롬프트 생성
             String prompt = buildDallePrompt(character);
@@ -162,13 +170,13 @@ public class CharacterImageService {
             log.info("캐릭터 '{}' S3 업로드 완료: {}", character.getName(), s3Url);
             
             // 6. Character 엔티티 업데이트 (URL과 상태를 COMPLETED로)
-            transactionService.updateImageAndStatus(character.getId(), s3Url, ImageGenerationStatus.COMPLETED);
+            transactionService.updateImageAndStatus(characterId, s3Url, ImageGenerationStatus.COMPLETED);
             
             log.info("캐릭터 '{}' 이미지 생성 및 저장 완료", character.getName());
 
         } catch (Exception e) {
             log.error("캐릭터 '{}' 이미지 생성 중 오류 발생", character.getName(), e);
-            transactionService.updateStatus(character.getId(), ImageGenerationStatus.FAILED);
+            transactionService.updateStatus(characterId, ImageGenerationStatus.FAILED);
             throw new RuntimeException("이미지 생성 중 오류 발생: " + character.getName(), e);
         }
     }
@@ -251,15 +259,15 @@ public class CharacterImageService {
     /**
      * 이미지 생성 실패 시 폴백 이미지로 설정
      *
-     * @param character 대상 캐릭터
+     * @param characterId 대상 캐릭터 ID
      */
-    private void saveFallbackImage(Character character) {
+    private void saveFallbackImage(Long characterId) {
         try {
             String fallbackUrl = imageProperties.getFallbackUrl();
-            transactionService.updateImageAndStatus(character.getId(), fallbackUrl, ImageGenerationStatus.FAILED);
-            log.info("캐릭터 '{}' - 폴백 이미지 설정 완료", character.getName());
+            transactionService.updateImageAndStatus(characterId, fallbackUrl, ImageGenerationStatus.FAILED);
+            log.info("캐릭터 ID {} - 폴백 이미지 설정 완료", characterId);
         } catch (Exception e) {
-            log.error("캐릭터 '{}' - 폴백 이미지 설정 실패", character.getName(), e);
+            log.error("캐릭터 ID {} - 폴백 이미지 설정 실패", characterId, e);
         }
     }
 }
