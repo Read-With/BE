@@ -55,4 +55,10 @@ public interface CharacterRepository extends JpaRepository<Character, Long> {
     void updateProfileImageAndStatus(@Param("characterId") Long characterId, 
                                       @Param("imageUrl") String imageUrl, 
                                       @Param("status") ImageGenerationStatus status);
+
+    /**
+     * ID로 Character 조회 시 Book을 함께 fetch join (LAZY 로딩 문제 해결)
+     */
+    @Query("SELECT c FROM Character c LEFT JOIN FETCH c.book WHERE c.id = :id")
+    Optional<Character> findByIdWithBook(@Param("id") Long id);
 }
