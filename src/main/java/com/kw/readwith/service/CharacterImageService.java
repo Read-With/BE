@@ -41,12 +41,12 @@ public class CharacterImageService {
      * 여러 캐릭터의 이미지를 비동기로 생성
      * 배치 단위로 처리하며, Rate Limit 방지를 위해 요청 간 딜레이 적용
      * 
-     * @param characters 이미지를 생성할 캐릭터 리스트
+     * @param characterIds 이미지를 생성할 캐릭터 ID 리스트
      * @return 비동기 작업 결과
      */
     @Async("imageGenerationExecutor")
-    public CompletableFuture<Void> generateImagesAsync(List<Character> characters) {
-        int totalCount = characters.size();
+    public CompletableFuture<Void> generateImagesAsync(List<Long> characterIds) {
+        int totalCount = characterIds.size();
         log.info("캐릭터 이미지 생성 시작 - 총 {}명 (배치 크기: {}명)", 
             totalCount, imageProperties.getBatchSize());
         
@@ -55,11 +55,22 @@ public class CharacterImageService {
         int failedCount = 0;
         int skippedCount = 0;
         
-        for (int i = 0; i < characters.size(); i++) {
-            Character character = characters.get(i);
+        for (int i = 0; i < characterIds.size(); i++) {
+            Long characterId = characterIds.get(i);
             processedCount++;
             
             try {
+                // 비동기 스레드 내에서 엔티티를 다시 조회 (book을 fetch join으로 함께 로드)
+                Character character = characterRepository.findByIdWithBook(characterId)
+                        .orElseThrow(() -> new RuntimeException("Character not found: " + characterId));
+                
+                // NULL 체크 및 기본값 설정
+                if (character.getImageGenerationStatus() == null) {
+                    log.warn("캐릭터 '{}' - imageGenerationStatus가 NULL입니다. PENDING으로 설정합니다.", 
+                        character.getName());
+                    transactionService.updateStatus(characterId, ImageGenerationStatus.PENDING);
+                }
+                
                 // 이미 이미지가 있거나 생성 완료된 경우 스킵
                 if (character.getProfileImage() != null && !character.getProfileImage().isEmpty() 
                     && character.getImageGenerationStatus() == ImageGenerationStatus.COMPLETED) {
@@ -70,7 +81,7 @@ public class CharacterImageService {
                 }
 
                 // 상태를 PENDING으로 설정
-                transactionService.updateStatus(character.getId(), ImageGenerationStatus.PENDING);
+                transactionService.updateStatus(characterId, ImageGenerationStatus.PENDING);
                 
                 log.info("[{}/{}] 캐릭터 '{}' 이미지 생성 시작...", 
                     processedCount, totalCount, character.getName());
@@ -82,7 +93,7 @@ public class CharacterImageService {
                     processedCount, totalCount, character.getName());
                 
                 // Rate Limit 방지: 마지막 캐릭터가 아니면 딜레이 적용
-                if (i < characters.size() - 1) {
+                if (i < characterIds.size() - 1) {
                     long delay = imageProperties.getDelayBetweenRequestsMs();
                     log.debug("다음 요청까지 {}ms 대기...", delay);
                     Thread.sleep(delay);
@@ -95,15 +106,15 @@ public class CharacterImageService {
                 }
                 
             } catch (InterruptedException e) {
-                log.error("캐릭터 '{}' 처리 중 인터럽트 발생", character.getName(), e);
+                log.error("캐릭터 ID {} 처리 중 인터럽트 발생", characterId, e);
                 Thread.currentThread().interrupt();
                 failedCount++;
-                saveFallbackImage(character);
+                saveFallbackImageById(characterId);
                 break; // 인터럽트 시 중단
             } catch (Exception e) {
-                log.error("캐릭터 '{}' 이미지 생성 실패: {}", character.getName(), e.getMessage(), e);
+                log.error("캐릭터 ID {} 이미지 생성 실패: {}", characterId, e.getMessage(), e);
                 failedCount++;
-                saveFallbackImage(character);
+                saveFallbackImageById(characterId);
             }
         }
         
@@ -249,17 +260,17 @@ public class CharacterImageService {
     }
 
     /**
-     * 이미지 생성 실패 시 폴백 이미지로 설정
+     * 이미지 생성 실패 시 폴백 이미지로 설정 (ID 기반)
      *
-     * @param character 대상 캐릭터
+     * @param characterId 대상 캐릭터 ID
      */
-    private void saveFallbackImage(Character character) {
+    private void saveFallbackImageById(Long characterId) {
         try {
             String fallbackUrl = imageProperties.getFallbackUrl();
-            transactionService.updateImageAndStatus(character.getId(), fallbackUrl, ImageGenerationStatus.FAILED);
-            log.info("캐릭터 '{}' - 폴백 이미지 설정 완료", character.getName());
+            transactionService.updateImageAndStatus(characterId, fallbackUrl, ImageGenerationStatus.FAILED);
+            log.info("캐릭터 ID {} - 폴백 이미지 설정 완료", characterId);
         } catch (Exception e) {
-            log.error("캐릭터 '{}' - 폴백 이미지 설정 실패", character.getName(), e);
+            log.error("캐릭터 ID {} - 폴백 이미지 설정 실패", characterId, e);
         }
     }
 }
