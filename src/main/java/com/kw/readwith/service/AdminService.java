@@ -96,9 +96,13 @@ public class AdminService {
             if (!newCharacters.isEmpty()) {
                 List<Character> savedCharacters = characterRepository.saveAll(newCharacters);
                 
-                // 캐릭터 저장 후 이미지 생성 비동기 실행
+                // 캐릭터 ID만 추출하여 비동기 메서드에 전달
+                List<Long> characterIds = savedCharacters.stream()
+                        .map(Character::getId)
+                        .collect(Collectors.toList());
+                
                 log.info("캐릭터 {}명 저장 완료. 이미지 생성을 시작합니다.", savedCharacters.size());
-                characterImageService.generateImagesAsync(savedCharacters);
+                characterImageService.generateImagesAsync(characterIds);
             }
             return newCharacters.size();
 
