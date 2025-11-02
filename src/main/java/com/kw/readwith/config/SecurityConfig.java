@@ -54,7 +54,8 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/favicon.ico",
                                 "/error",
-                                "/actuator/health"  // 헬스체크
+                                "/health",  // ELB 헬스체크 (EB 배포 필수)
+                                "/actuator/health"  // Spring Actuator 헬스체크
                         ).permitAll()
                         // 인증이 필요한 엔드포인트
                         .requestMatchers(
