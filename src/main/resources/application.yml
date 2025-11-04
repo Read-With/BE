@@ -49,6 +49,16 @@ spring:
             token-uri: https://oauth2.googleapis.com/token
             user-info-uri: https://www.googleapis.com/oauth2/v2/userinfo
             user-name-attribute: email
+  # Spring AI - OpenAI 설정
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      image:
+        options:
+          model: dall-e-3
+          size: 1024x1024
+          quality: standard
+          n: 1
 
 # JWT 설정
 jwt:
@@ -74,3 +84,91 @@ cloud:
     path:
       original: original
       metadata: metadata
+
+# 캐릭터 이미지 생성 설정
+character-image:
+  fallback-url: https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/default-character.jpg
+
+  # 극강 통제 프롬프트 (얼굴만 나오도록)
+  common-style: "CRITICAL: FACE PORTRAIT ONLY - NO OTHER ELEMENTS ALLOWED
+
+    ═══ PRIMARY RULE (MOST IMPORTANT) ═══
+    Draw ONLY the person's head and upper shoulders. NOTHING ELSE. NO decorative elements. NO patterns. NO symbols. NO ornaments. NO frames. NO borders. The subject's FACE is the ONLY focal point. The background must be COMPLETELY EMPTY except for plain paper texture.
+
+    COMPOSITION (ENFORCE STRICTLY):
+    - Square format 1:1 ratio
+    - Show ONLY: top of head to upper shoulders (bust portrait)
+    - Face occupies 65-70% of total image area
+    - Head perfectly centered horizontally and vertically
+    - Eye-level straight-on view, subject faces camera directly
+    - ZERO rotation, ZERO tilt
+    - Shoulders visible only at very bottom edge
+
+    BACKGROUND (ABSOLUTE REQUIREMENT):
+    - COMPLETELY PLAIN warm beige paper (#F5F1E8)
+    - ONLY subtle paper grain texture visible
+    - ZERO patterns, ZERO decorative elements
+    - ZERO geometric shapes, ZERO borders, ZERO frames
+    - ZERO symbols, ZERO ornaments, ZERO flourishes
+    - If you see ANY pattern or decoration in background, REMOVE IT
+    - Background fades to nothing at edges
+
+    ART STYLE (CRITICAL):
+    - 1950s-1960s vintage book illustration
+    - Hand-drawn pen and ink technique
+    - Clean black ink linework for facial features
+    - Subtle cross-hatching ONLY for shadows on face
+    - Soft sepia wash for skin tones
+    - MUST look hand-drawn, NOT digital
+    - NO digital painting effects
+
+    COLOR PALETTE (STRICT):
+    - Background: warm beige #F5F1E8 ONLY
+    - Linework: sepia brown #704214
+    - Shadows: lighter sepia tones
+    - ONE subtle accent color on clothing ONLY (choose from: dusty blue #5B7C8D, forest green #4A5F4F, burgundy #6B3E3E, deep teal #3D5E5C)
+    - NO bright colors, NO pure black, NO white highlights
+
+    LIGHTING:
+    - Soft diffused light from front-upper angle
+    - Even illumination across entire face
+    - NO dramatic shadows
+    - NO high contrast
+    - NO rim lighting
+    - NO directional spots
+
+    TEXTURE:
+    - Visible paper grain throughout
+    - Slight cross-hatch texture in skin
+    - Matte finish appearance
+    - NO glossy surfaces
+    - NO digital smoothness
+    - NO photographic effects
+
+    ═══ ABSOLUTELY FORBIDDEN - NEVER INCLUDE ═══
+    ❌ Decorative patterns in background
+    ❌ Geometric shapes or borders
+    ❌ Symbols, emblems, or ornaments
+    ❌ Frames or edge decorations
+    ❌ Text, letters, or labels
+    ❌ Objects beside or behind subject
+    ❌ Scenery or landscape elements
+    ❌ Multiple subjects or people
+    ❌ Body parts below shoulders
+    ❌ Hands or arms
+    ❌ Modern clothing or accessories
+    ❌ Photorealistic rendering
+    ❌ Digital painting effects
+    ❌ HDR or enhanced contrast
+    ❌ Lens blur or bokeh
+    ❌ Vivid or neon colors
+    ❌ 3D rendering appearance
+    ❌ Busy or cluttered backgrounds
+
+    REMEMBER: This is a SIMPLE HEAD PORTRAIT ONLY. The person's face is THE ONLY element. Everything else must be plain beige paper. If DALL-E tries to add ANY decoration, pattern, symbol, or ornament - REJECT and keep background COMPLETELY PLAIN."
+
+  s3-path: character-images
+
+  # OpenAI API Rate Limit 방지 설정
+  delay-between-requests-ms: 2000 # 각 요청 사이 2초 대기
+  batch-size: 10 # 10명씩 배치 처리

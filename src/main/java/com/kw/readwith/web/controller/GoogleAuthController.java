@@ -58,12 +58,18 @@ public class GoogleAuthController {
         
         try {
             String authorizationCode = request.getCode();
+            String redirectUri = request.getRedirectUri();
+            
             if (authorizationCode == null || authorizationCode.isBlank()) {
                 return ApiResponse.onFailure("AUTH4001", "인증 코드가 필요합니다.", null);
             }
+            
+            if (redirectUri == null || redirectUri.isBlank()) {
+                return ApiResponse.onFailure("AUTH4001", "리다이렉트 URI가 필요합니다.", null);
+            }
 
             // Google OAuth2 서비스에서 사용자 정보 가져오기 및 사용자 생성/업데이트
-            User user = googleOAuth2Service.authenticateWithGoogle(authorizationCode);
+            User user = googleOAuth2Service.authenticateWithGoogle(authorizationCode, redirectUri);
 
             // JWT 토큰 생성
             String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail());

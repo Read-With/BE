@@ -1,6 +1,8 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.apiPayload.code.status.ErrorStatus;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.manifest.ManifestResponseDTO;
 import com.kw.readwith.service.ManifestService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,6 +10,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,6 +21,14 @@ import org.springframework.web.bind.annotation.*;
 public class ManifestController {
 
     private final ManifestService manifestService;
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Long) {
+            return (Long) authentication.getPrincipal();
+        }
+        throw new GeneralException(ErrorStatus._UNAUTHORIZED);
+    }
 
     /**
      * 책 구조/캐시 패키지 조회
@@ -52,10 +64,7 @@ public class ManifestController {
             )
             @PathVariable Long bookId) {
         
-        // TODO: 실제 인증된 사용자 ID 가져오기
-        // 현재는 임시로 하드코딩된 값 사용
-        Long userId = 1L; // JWT에서 추출해야 함
-        
+        Long userId = getCurrentUserId();
         ManifestResponseDTO response = manifestService.getBookManifest(bookId, userId);
         return ApiResponse.onSuccess(response);
     }

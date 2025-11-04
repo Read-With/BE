@@ -9,6 +9,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
+import com.kw.readwith.domain.enums.ImageGenerationStatus;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
@@ -50,6 +51,7 @@ public class AdminService {
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
     private final EventCharacterStatRepository statRepository;
     private final ObjectMapper objectMapper;
+    private final CharacterImageService characterImageService;
 
     // 파일명에서 챕터와 이벤트 인덱스를 추출하기 위한 정규표현식 패턴
     private static final Pattern RELATIONSHIP_FILE_PATTERN = Pattern.compile("chapter(\\d+)_.*?_event_(\\d+)\\.json");
@@ -85,13 +87,22 @@ public class AdminService {
                             .isMainCharacter(dto.isMainCharacter())
                             .personalityText(dto.getDescription())
                             .profileText(dto.getPortraitPrompt())
+                            .imageGenerationStatus(ImageGenerationStatus.PENDING)
                             .build();
                     newCharacters.add(character);
                 }
             }
 
             if (!newCharacters.isEmpty()) {
-                characterRepository.saveAll(newCharacters);
+                List<Character> savedCharacters = characterRepository.saveAll(newCharacters);
+                
+                // 캐릭터 ID만 추출하여 비동기 메서드에 전달
+                List<Long> characterIds = savedCharacters.stream()
+                        .map(Character::getId)
+                        .collect(Collectors.toList());
+                
+                log.info("캐릭터 {}명 저장 완료. 이미지 생성을 시작합니다.", savedCharacters.size());
+                characterImageService.generateImagesAsync(characterIds);
             }
             return newCharacters.size();
 
