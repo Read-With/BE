@@ -54,7 +54,9 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/favicon.ico",
                                 "/error",
-                                "/actuator/health"  // 헬스체크
+                                "/actuator/health",  // 헬스체크
+                                "/api/admin/**",
+                                "/api/books"
                         ).permitAll()
                         // 인증이 필요한 엔드포인트
                         .requestMatchers(
@@ -63,8 +65,6 @@ public class SecurityConfig {
                                 "/api/bookmarks/**", // 북마크
                                 "/api/favorites/**"  // 즐겨찾기
                         ).authenticated()
-
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN") // 관리자
 
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()

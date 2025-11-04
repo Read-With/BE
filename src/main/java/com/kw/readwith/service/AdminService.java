@@ -290,25 +290,32 @@ public class AdminService {
             Long characterBookId = Long.parseLong(entry.getKey());
             NodeWeightDTO weightDTO = entry.getValue();
 
-            Character character = characterRepository.findByBookAndCharacterId(book, characterBookId)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "책에 정의된 ID가 " + characterBookId + "인 캐릭터를 찾을 수 없습니다."));
+            Optional<Character> characterOpt = characterRepository.findByBookAndCharacterId(book, characterBookId);
 
-            // 기존 데이터가 있는지 확인
-            if (statRepository.findByEventAndCharacter(event, character).isPresent()) {
-                throw new GeneralException(ErrorStatus.NODE_WEIGHT_ALREADY_EXISTS,
-                        String.format("해당 이벤트에 대한 '%s' 캐릭터의 가중치 데이터가 이미 존재합니다.", character.getName()));
+            // 캐릭터가 존재할 경우에만 로직을 실행
+            if (characterOpt.isPresent()) {
+                Character character = characterOpt.get();
+
+                // 1. 기존 데이터가 있는지 확인
+                if (statRepository.findByEventAndCharacter(event, character).isPresent()) {
+                    throw new GeneralException(ErrorStatus.NODE_WEIGHT_ALREADY_EXISTS,
+                            String.format("해당 이벤트에 대한 '%s' 캐릭터의 가중치 데이터가 이미 존재합니다.", character.getName()));
+                }
+
+                // 2. 새로운 stat 객체 생성
+                EventCharacterStat stat = EventCharacterStat.builder()
+                        .event(event)
+                        .character(character)
+                        .nodeWeight(weightDTO.getWeight())
+                        .build();
+
+                log.info("Character {} weight: {}, count: {} (count not stored in EventCharacterStat)",
+                        character.getName(), weightDTO.getWeight(), weightDTO.getCount());
+
+                // 3. 리스트에 추가
+                newStats.add(stat);
             }
-
-            EventCharacterStat stat = EventCharacterStat.builder()
-                    .event(event)
-                    .character(character)
-                    .nodeWeight(weightDTO.getWeight())
-                    .build();
-            
-            // EventCharacterStat에는 count 필드가 없으므로 로그만 출력
-            log.info("Character {} weight: {}, count: {} (count not stored in EventCharacterStat)", 
-                    character.getName(), weightDTO.getWeight(), weightDTO.getCount());
-            newStats.add(stat);
+            // 캐릭터가 존재하지 않으면, 이 블록은 실행되지 않고 다음 데이터로 넘어감.
         }
 
         // 모든 검사가 끝난 후, 한번에 저장
@@ -336,31 +343,36 @@ public class AdminService {
                 continue;
             }
 
-            Character fromChar = characterRepository.findByBookAndCharacterId(book, dto.getId1())
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "id1에 해당하는 캐릭터(ID: " + dto.getId1() + ")를 찾을 수 없습니다."));
-            Character toChar = characterRepository.findByBookAndCharacterId(book, dto.getId2())
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, "id2에 해당하는 캐릭터(ID: " + dto.getId2() + ")를 찾을 수 없습니다."));
+            Optional<Character> fromCharOpt = characterRepository.findByBookAndCharacterId(book, dto.getId1());
+            Optional<Character> toCharOpt = characterRepository.findByBookAndCharacterId(book, dto.getId2());
 
-            // 관계가 (A->B) 또는 (B->A) 방향으로 이미 존재하는지 확인
-            if (eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, fromChar, toChar) ||
-                    eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, toChar, fromChar)) {
-                throw new GeneralException(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS,
-                        String.format("해당 이벤트에 대한 '%s'와(과) '%s'의 관계 데이터가 이미 존재합니다.", fromChar.getName(), toChar.getName()));
-            }
+            // 두 캐릭터가 모두 존재할 경우에만 아래 로직을 실행
+            if (fromCharOpt.isPresent() && toCharOpt.isPresent()) {
+                Character fromChar = fromCharOpt.get();
+                Character toChar = toCharOpt.get();
 
-            try {
-                EventRelationshipEdge edge = EventRelationshipEdge.builder()
-                        .event(event)
-                        .fromCharacter(fromChar)
-                        .toCharacter(toChar)
-                        .sentimentScore(dto.getPositivity().floatValue())
-                        .interactionCount(dto.getCount())
-                        .relationTags(objectMapper.writeValueAsString(dto.getRelation()))
-                        .build();
-                newEdges.add(edge);
-            } catch (JsonProcessingException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, String.format("캐릭터 %d와(과) %d의 관계 태그 처리 중 오류가 발생했습니다.", dto.getId1(), dto.getId2()));
+                // 관계가 (A->B) 또는 (B->A) 방향으로 이미 존재하는지 확인
+                if (eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, fromChar, toChar) ||
+                        eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, toChar, fromChar)) {
+                    throw new GeneralException(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS,
+                            String.format("해당 이벤트에 대한 '%s'와(과) '%s'의 관계 데이터가 이미 존재합니다.", fromChar.getName(), toChar.getName()));
+                }
+
+                try {
+                    EventRelationshipEdge edge = EventRelationshipEdge.builder()
+                            .event(event)
+                            .fromCharacter(fromChar)
+                            .toCharacter(toChar)
+                            .sentimentScore(dto.getPositivity().floatValue())
+                            .interactionCount(dto.getCount())
+                            .relationTags(objectMapper.writeValueAsString(dto.getRelation()))
+                            .build();
+                    newEdges.add(edge);
+                } catch (JsonProcessingException e) {
+                    throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, String.format("캐릭터 %d와(과) %d의 관계 태그 처리 중 오류가 발생했습니다.", dto.getId1(), dto.getId2()));
+                }
             }
+            // 캐릭터가 하나라도 존재하지 않으면, 이 데이터는 무시하고 다음 루프로 넘어갑니다.
         }
 
         // 모든 검사가 끝난 후, 한번에 저장
