@@ -20,7 +20,7 @@ public class CharacterDTO {
     @JsonProperty("main_character")
     private boolean isMainCharacter;
 
-    private String description;
+    private String description_ko;
 
     @JsonProperty("portrait_prompt")
     private String portraitPrompt;

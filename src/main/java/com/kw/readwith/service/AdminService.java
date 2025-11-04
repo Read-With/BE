@@ -85,7 +85,7 @@ public class AdminService {
                             .name(dto.getCommonName())
                             .names(String.join(",", dto.getNames()))
                             .isMainCharacter(dto.isMainCharacter())
-                            .personalityText(dto.getDescription())
+                            .personalityText(dto.getDescription_ko())
                             .profileText(dto.getPortraitPrompt())
                             .imageGenerationStatus(ImageGenerationStatus.PENDING)
                             .build();
