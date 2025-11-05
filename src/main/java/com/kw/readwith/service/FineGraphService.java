@@ -102,8 +102,8 @@ public class FineGraphService {
                 .label(character.getName())
                 .isMainCharacter(character.isMainCharacter())
                 .profileImage(character.getProfileImage())
-                .description(truncateText(character.getProfileText(), 200))
-                .portraitPrompt(character.getPersonalityText())
+                .description(truncateText(character.getPersonalityText(), 200))  // 성격 설명
+                .portraitPrompt(character.getProfileText())  // 외모 묘사 (이미지 생성용)
                 .names(parseNames(character.getNames(), character.getName()))
                 .weight(weight)
                 .count(count)
