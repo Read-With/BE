@@ -97,8 +97,11 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // 허용할 오리진 설정
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        // 허용할 오리진 설정 (로컬 개발 + Vercel 배포 환경)
+        configuration.setAllowedOrigins(Arrays.asList(
+                "http://localhost:5173",
+                "https://readwith-frontend-m7lz4exqc-steven25s-projects.vercel.app"
+        ));
 
         // 허용할 HTTP 메서드
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
@@ -111,6 +114,9 @@ public class SecurityConfig {
 
         // 노출할 헤더 설정
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
+
+        // Preflight 요청 캐시 시간 (1시간)
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
