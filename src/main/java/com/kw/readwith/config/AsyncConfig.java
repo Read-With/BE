@@ -2,40 +2,52 @@ package com.kw.readwith.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * 비동기 작업 처리를 위한 설정
- * 캐릭터 이미지 생성과 같은 시간이 오래 걸리는 작업을 별도 스레드에서 처리
+ * 비동기 작업 설정
+ * t2.micro 환경에 최적화된 스레드 풀 설정
  */
 @Configuration
 @EnableAsync
-public class AsyncConfig {
+public class AsyncConfig implements AsyncConfigurer {
 
     /**
-     * 이미지 생성 전용 ThreadPool Executor
-     * AWS 프리티어 환경을 고려한 보수적인 설정
-     * - 코어 스레드: 1개 (순차 처리로 서버 부하 최소화)
-     * - 최대 스레드: 2개 (긴급 시에만 추가 스레드 사용)
-     * - 큐 용량: 100개 (많은 캐릭터도 대기 가능)
-     * 
-     * 100명 캐릭터 처리 시: 약 40-50분 소요 (느리지만 안정적)
+     * 캐릭터 이미지 생성용 스레드 풀
+     * t2.micro(1GB RAM, 1 vCPU) 환경에 맞춰 제한적으로 설정
      */
     @Bean(name = "imageGenerationExecutor")
     public Executor imageGenerationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1); // 기본 1개 스레드 (순차 처리)
-        executor.setMaxPoolSize(2); // 최대 2개 (부하 방지)
-        executor.setQueueCapacity(100); // 넉넉한 큐 용량
-        executor.setThreadNamePrefix("ImageGen-");
-        executor.setKeepAliveSeconds(60); // 유휴 스레드 1분 후 제거
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(180); // 종료 시 최대 3분 대기
+        
+        // 코어 스레드: 동시에 2개의 이미지만 생성
+        executor.setCorePoolSize(2);
+        
+        // 최대 스레드: 부하가 높을 때 최대 3개까지 허용
+        executor.setMaxPoolSize(3);
+        
+        // 대기 큐: 50개까지 대기 가능
+        executor.setQueueCapacity(50);
+        
+        // 스레드 이름 prefix (로그 추적 용이)
+        executor.setThreadNamePrefix("image-gen-");
+        
+        // 큐가 가득 찰 경우 호출한 스레드에서 직접 실행
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        
+        // 스레드 풀 초기화
         executor.initialize();
+        
         return executor;
     }
+    
+    @Override
+    public Executor getAsyncExecutor() {
+        return imageGenerationExecutor();
+    }
 }
-

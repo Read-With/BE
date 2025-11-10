@@ -8,12 +8,14 @@ spring:
     password: ${AWS_DB_PASSWORD} #12341234 #
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 20 # 풀 크기 늘리기
-      # DB 커넥션 타임아웃 방지 설정
-      connection-timeout: 30000 # 클라이언트가 풀에서 커넥션을 얻기까지 기다리는 최대 시간 (30초)
-      max-lifetime: 1800000 # 커넥션의 최대 수명 (30분)
+      # t2.micro 환경 최적화: 커넥션 풀 크기 감축
+      maximum-pool-size: 8 # 20 → 8 (메모리 절약)
+      minimum-idle: 2 # 최소 유지 커넥션
+      # 타임아웃 설정 최적화
+      connection-timeout: 20000 # 30초 → 20초
+      max-lifetime: 900000 # 30분 → 15분 (커넥션 재사용 주기 단축)
       keepalive-time: 300000 # 유휴 커넥션의 생존 여부를 확인하는 주기 (5분)
-      idle-timeout: 600000 # 커넥션이 풀에서 유휴 상태로 유지될 수 있는 최대 시간 (10분)
+      idle-timeout: 300000 # 10분 → 5분 (유휴 커넥션 빠른 정리)
   sql:
     init:
       mode: never
@@ -28,6 +30,11 @@ spring:
         hbm2ddl:
           auto: create
         default_batch_fetch_size: 1000
+        # 배치 INSERT 최적화 (성능 개선)
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   servlet:
     multipart:
       max-file-size: 20MB

@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +54,9 @@ public class AdminService {
     private final EventCharacterStatRepository statRepository;
     private final ObjectMapper objectMapper;
     private final CharacterImageService characterImageService;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
 
     // 파일명에서 챕터와 이벤트 인덱스를 추출하기 위한 정규표현식 패턴
     private static final Pattern RELATIONSHIP_FILE_PATTERN = Pattern.compile("chapter(\\d+)_.*?_event_(\\d+)\\.json");
@@ -67,56 +72,120 @@ public class AdminService {
      */
     @Transactional
     public int uploadCharacters(Long bookId, MultipartFile file) {
+        // 파일 유효성 검증
+        if (file == null || file.isEmpty()) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "업로드 파일이 비어있습니다.");
+        }
+        
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         try {
             CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterListDTO.class);
+            
+            // DTO 유효성 검증
+            if (characterListDTO == null || characterListDTO.getCharacters() == null) {
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "캐릭터 데이터가 올바르지 않습니다.");
+            }
+            
+            if (characterListDTO.getCharacters().isEmpty()) {
+                log.warn("업로드할 캐릭터가 없습니다.");
+                return 0;
+            }
 
             List<Character> newCharacters = new ArrayList<>();
             for (CharacterDTO dto : characterListDTO.getCharacters()) {
+                // 필수 필드 검증
+                if (dto.getCommonName() == null || dto.getCommonName().trim().isEmpty()) {
+                    log.warn("캐릭터 이름이 없어 스킵합니다: {}", dto);
+                    continue;
+                }
+                if (dto.getId() == null) {
+                    log.warn("캐릭터 ID가 없어 스킵합니다: {}", dto.getCommonName());
+                    continue;
+                }
+                
                 // 중복 저장을 방지하기 위해, 해당 이름의 캐릭터가 없는 경우에만 추가
                 Optional<Character> existingCharacter = characterRepository.findByBookAndName(book, dto.getCommonName());
 
                 if (existingCharacter.isEmpty()) {
+                    // names 안전 처리
+                    String namesStr = "";
+                    if (dto.getNames() != null && !dto.getNames().isEmpty()) {
+                        namesStr = String.join(",", dto.getNames());
+                    }
+                    
                     Character character = Character.builder()
                             .book(book)
                             .characterId(dto.getId())
-                            .name(dto.getCommonName())
-                            .names(String.join(",", dto.getNames()))
+                            .name(dto.getCommonName().trim())
+                            .names(namesStr)
                             .isMainCharacter(dto.isMainCharacter())
                             .personalityText(dto.getDescription_ko())
                             .profileText(dto.getPortraitPrompt())
                             .imageGenerationStatus(ImageGenerationStatus.PENDING)
                             .build();
                     newCharacters.add(character);
+                } else {
+                    log.info("캐릭터 '{}' 이미 존재하여 스킵", dto.getCommonName());
                 }
             }
 
-            if (!newCharacters.isEmpty()) {
-                List<Character> savedCharacters = characterRepository.saveAll(newCharacters);
-                
-                // 캐릭터 ID만 추출하여 비동기 메서드에 전달
-                List<Long> characterIds = savedCharacters.stream()
-                        .map(Character::getId)
-                        .collect(Collectors.toList());
-                
-                log.info("캐릭터 {}명 저장 완료. 이미지 생성을 시작합니다.", savedCharacters.size());
-                characterImageService.generateImagesAsync(characterIds);
+            if (newCharacters.isEmpty()) {
+                log.info("저장할 새로운 캐릭터가 없습니다.");
+                return 0;
             }
-            return newCharacters.size();
+
+            //  DB 저장 with 예외 처리
+            List<Character> savedCharacters;
+            try {
+                savedCharacters = characterRepository.saveAll(newCharacters);
+                log.info("캐릭터 {}명 DB 저장 완료", savedCharacters.size());
+            } catch (Exception e) {
+                log.error("캐릭터 DB 저장 실패", e);
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "캐릭터 저장 중 데이터베이스 오류가 발생했습니다.");
+            }
+                
+            // 캐릭터 ID만 추출하여 비동기 메서드에 전달
+            List<Long> characterIds = savedCharacters.stream()
+                    .map(Character::getId)
+                    .collect(Collectors.toList());
+            
+            // 이미지 생성 (실패해도 계속 진행)
+            try {
+                log.info("캐릭터 이미지 생성 백그라운드 작업 시작");
+                characterImageService.generateImagesAsync(characterIds);
+            } catch (Exception e) {
+                log.error("캐릭터 이미지 생성 시작 실패 (백그라운드 작업, 계속 진행)", e);
+            }
+            
+            return savedCharacters.size();
 
         } catch (IOException e) {
-            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+            log.error("캐릭터 JSON 파일 파싱 실패", e);
+            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "JSON 파일 형식이 올바르지 않습니다.");
+        } catch (GeneralException e) {
+            // 이미 처리된 예외는 그대로 전파
+            throw e;
+        } catch (Exception e) {
+            log.error("캐릭터 업로드 중 예상치 못한 오류", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "캐릭터 업로드 처리 중 오류가 발생했습니다.");
         }
     }
 
     /**
      * 여러 챕터의 이벤트 JSON 파일들을 한번에 업로드합니다.
      * 파일 이름(chapter<번호>_events.json)에서 챕터 번호를 자동으로 인식합니다.
+     * 
+     * 배치 처리: 대량 데이터를 500개씩 나눠서 저장 (메모리 최적화)
      */
     @Transactional
     public int uploadEvents(Long bookId, List<MultipartFile> eventFiles) {
+        // 파일 리스트 유효성 검증
+        if (eventFiles == null || eventFiles.isEmpty()) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "업로드할 이벤트 파일이 없습니다.");
+        }
+        
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
@@ -125,14 +194,33 @@ public class AdminService {
         Pattern pattern = Pattern.compile("chapter(\\d+)_events\\.json");
 
         for (MultipartFile eventFile : eventFiles) {
+            // 파일 유효성 검증
+            if (eventFile == null || eventFile.isEmpty()) {
+                log.warn("빈 파일이 포함되어 스킵합니다.");
+                continue;
+            }
+            
             String filename = eventFile.getOriginalFilename();
+            if (filename == null || filename.trim().isEmpty()) {
+                log.warn("파일명이 없는 파일을 스킵합니다.");
+                continue;
+            }
+            
             Matcher matcher = pattern.matcher(filename);
 
             if (!matcher.matches()) {
-                throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "파일명: " + filename);
+                throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "파일명 형식이 올바르지 않습니다: " + filename);
             }
 
-            Integer chapterIdx = Integer.parseInt(matcher.group(1));
+            // 타입 변환 예외 처리
+            Integer chapterIdx;
+            try {
+                chapterIdx = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                log.error("챕터 번호 파싱 실패: {}", filename, e);
+                throw new GeneralException(ErrorStatus.INVALID_FILE_NAME_FORMAT, "챕터 번호가 올바르지 않습니다: " + filename);
+            }
+            
             Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
                     .orElseGet(() -> {
                         Chapter newChapter = Chapter.builder()
@@ -149,27 +237,76 @@ public class AdminService {
 
             try {
                 List<EventDTO> eventDTOs = objectMapper.readValue(eventFile.getInputStream(), new TypeReference<List<EventDTO>>() {});
-                List<Event> newEventsFromFile = eventDTOs.stream()
-                        .map(dto -> Event.builder()
-                                .book(book)
-                                .chapter(chapter)
-                                .idx(dto.getEventId())
-                                .startPos(dto.getStart())
-                                .endPos(dto.getEnd())
-                                .rawText("") // text 필드가 제거되어 빈 문자열로 설정
-                                .build())
-                        .collect(Collectors.toList());
+                
+                // DTO 유효성 검증
+                if (eventDTOs == null || eventDTOs.isEmpty()) {
+                    log.warn("파일 '{}'에 이벤트 데이터가 없습니다.", filename);
+                    continue;
+                }
+                
+                List<Event> newEventsFromFile = new ArrayList<>();
+                for (EventDTO dto : eventDTOs) {
+                    // 필수 필드 검증
+                    if (dto.getEventId() == null) {
+                        log.warn("이벤트 ID가 없어 스킵합니다 (파일: {})", filename);
+                        continue;
+                    }
+                    if (dto.getStart() == null || dto.getEnd() == null) {
+                        log.warn("이벤트 위치 정보가 없어 스킵합니다 (파일: {}, eventId: {})", filename, dto.getEventId());
+                        continue;
+                    }
+                    
+                    Event event = Event.builder()
+                            .book(book)
+                            .chapter(chapter)
+                            .idx(dto.getEventId())
+                            .startPos(dto.getStart())
+                            .endPos(dto.getEnd())
+                            .rawText("") // text 필드가 제거되어 빈 문자열로 설정
+                            .build();
+                    newEventsFromFile.add(event);
+                }
+                
                 allNewEvents.addAll(newEventsFromFile);
+                log.info("파일 '{}' 처리 완료: {}개 이벤트", filename, newEventsFromFile.size());
+                
             } catch (IOException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
+                log.error("이벤트 JSON 파일 파싱 실패: {}", filename, e);
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "JSON 파일 파싱 실패: " + filename);
+            } catch (Exception e) {
+                log.error("이벤트 파일 처리 중 오류: {}", filename, e);
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "이벤트 파일 처리 실패: " + filename);
             }
         }
 
-        // 모든 파일 유효성 검사가 끝난 후, DB에 한번에 저장
-        if (!allNewEvents.isEmpty()) {
-            eventRepository.saveAll(allNewEvents);
+        // 배치 처리로 저장 (500개씩)
+        if (allNewEvents.isEmpty()) {
+            log.warn("저장할 이벤트가 없습니다.");
+            return 0;
         }
-        return allNewEvents.size();
+        
+        int batchSize = 500;
+        int totalSaved = 0;
+        
+        try {
+            for (int i = 0; i < allNewEvents.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, allNewEvents.size());
+                List<Event> batch = allNewEvents.subList(i, end);
+                
+                eventRepository.saveAll(batch);
+                entityManager.flush();   // 즉시 DB 반영
+                entityManager.clear();   // 1차 캐시 비우기 (메모리 절약)
+                
+                totalSaved += batch.size();
+                log.info("이벤트 배치 진행: {}/{}", totalSaved, allNewEvents.size());
+            }
+            log.info("이벤트 {}개 DB 저장 완료", totalSaved);
+        } catch (Exception e) {
+            log.error("이벤트 DB 저장 실패", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "이벤트 저장 중 데이터베이스 오류가 발생했습니다.");
+        }
+        
+        return totalSaved;
     }
 
     /**
@@ -226,11 +363,22 @@ public class AdminService {
         }
 
         if (!allNewSummaries.isEmpty()) {
-            characterPovSummaryRepository.saveAll(allNewSummaries);
+            try {
+                characterPovSummaryRepository.saveAll(allNewSummaries);
+                log.info("챕터 요약 {}개 DB 저장 완료", allNewSummaries.size());
+            } catch (Exception e) {
+                log.error("챕터 요약 DB 저장 실패", e);
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "챕터 요약 저장 중 데이터베이스 오류가 발생했습니다.");
+            }
         }
 
         // 모든 챕터의 요약이 완료되었는지 확인 후, 책의 전체 요약 상태 업데이트
-        checkAndUpdateBookSummaryStatus(book);
+        try {
+            checkAndUpdateBookSummaryStatus(book);
+        } catch (Exception e) {
+            log.error("책 요약 상태 업데이트 중 오류 발생", e);
+            // 책 상태 업데이트 실패는 critical하지 않으므로 로그만 남김
+        }
         return allNewSummaries.size();
     }
 
@@ -298,8 +446,20 @@ public class AdminService {
 
         List<EventCharacterStat> newStats = new ArrayList<>();
         for (Map.Entry<String, NodeWeightDTO> entry : nodeWeightsMap.entrySet()) {
-            Long characterBookId = Long.parseLong(entry.getKey());
+            // 타입 변환 예외 처리
+            Long characterBookId;
+            try {
+                characterBookId = Long.parseLong(entry.getKey());
+            } catch (NumberFormatException e) {
+                log.warn("캐릭터 ID 형식 오류, 스킵: {}", entry.getKey());
+                continue;
+            }
+            
             NodeWeightDTO weightDTO = entry.getValue();
+            if (weightDTO == null) {
+                log.warn("캐릭터 ID {}의 가중치 정보가 null입니다, 스킵", characterBookId);
+                continue;
+            }
 
             Optional<Character> characterOpt = characterRepository.findByBookAndCharacterId(book, characterBookId);
 
@@ -330,7 +490,18 @@ public class AdminService {
         }
 
         // 모든 검사가 끝난 후, 한번에 저장
-        statRepository.saveAll(newStats);
+        if (newStats.isEmpty()) {
+            log.warn("저장할 노드 가중치가 없습니다.");
+            return 0;
+        }
+        
+        try {
+            statRepository.saveAll(newStats);
+            log.info("노드 가중치 {}개 DB 저장 완료", newStats.size());
+        } catch (Exception e) {
+            log.error("노드 가중치 DB 저장 실패", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "노드 가중치 저장 중 데이터베이스 오류가 발생했습니다.");
+        }
         return newStats.size();
     }
 
@@ -349,8 +520,20 @@ public class AdminService {
 
         List<EventRelationshipEdge> newEdges = new ArrayList<>();
         for (RelationshipDTO dto : relationDTOs) {
+            // 필수 필드 검증
+            if (dto.getId1() == null || dto.getId2() == null) {
+                log.warn("관계 DTO에 캐릭터 ID가 null입니다, 스킵");
+                continue;
+            }
+            
             // 자기 자신과의 관계는 제외
             if (dto.getId1().equals(dto.getId2())) {
+                continue;
+            }
+            
+            // Positivity와 Count 검증
+            if (dto.getPositivity() == null || dto.getCount() == null) {
+                log.warn("관계 DTO에 필수 필드(positivity/count)가 null입니다 ({}->{}), 스킵", dto.getId1(), dto.getId2());
                 continue;
             }
 
@@ -387,8 +570,17 @@ public class AdminService {
         }
 
         // 모든 검사가 끝난 후, 한번에 저장
-        if (!newEdges.isEmpty()) {
+        if (newEdges.isEmpty()) {
+            log.warn("저장할 관계 엣지가 없습니다.");
+            return 0;
+        }
+        
+        try {
             eventRelationshipEdgeRepository.saveAll(newEdges);
+            log.info("관계 엣지 {}개 DB 저장 완료", newEdges.size());
+        } catch (Exception e) {
+            log.error("관계 엣지 DB 저장 실패", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "관계 데이터 저장 중 데이터베이스 오류가 발생했습니다.");
         }
         return newEdges.size();
     }
@@ -543,3 +735,4 @@ public class AdminService {
         private String summary;
     }
 }
+
