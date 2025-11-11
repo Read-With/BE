@@ -618,6 +618,40 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 특정 캐릭터의 프로필 이미지를 재생성합니다.
+     * 이미지 생성에 실패했거나 품질이 좋지 않은 경우 사용합니다.
+     * 
+     * @param characterId 이미지를 재생성할 캐릭터 ID
+     */
+    @Transactional
+    public void regenerateCharacterImage(Long characterId) {
+        // 캐릭터 존재 여부 확인
+        Character character = characterRepository.findById(characterId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, 
+                        "캐릭터를 찾을 수 없습니다: " + characterId));
+        
+        log.info("캐릭터 '{}' (ID: {}) 이미지 재생성 시작", character.getName(), characterId);
+        
+        // 기존 이미지 상태 로깅
+        if (character.getProfileImage() != null && !character.getProfileImage().isEmpty()) {
+            log.info("기존 이미지 URL: {}, 상태: {}", 
+                    character.getProfileImage(), character.getImageGenerationStatus());
+        } else {
+            log.info("기존 이미지 없음, 상태: {}", character.getImageGenerationStatus());
+        }
+        
+        // 이미지 재생성 (비동기가 아닌 동기 방식으로 호출)
+        try {
+            characterImageService.generateAndSaveImage(characterId);
+            log.info("캐릭터 '{}' (ID: {}) 이미지 재생성 완료", character.getName(), characterId);
+        } catch (Exception e) {
+            log.error("캐릭터 '{}' (ID: {}) 이미지 재생성 실패", character.getName(), characterId, e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, 
+                    "이미지 재생성 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
     /*
      * =====================================================================================
      * 3. 데이터 삭제
