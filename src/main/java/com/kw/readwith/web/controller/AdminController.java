@@ -105,4 +105,12 @@ public class AdminController {
         List<UnsummarizedItemDTO> response = adminService.getUnsummarizedChapters();
         return ApiResponse.onSuccess(response);
     }
+
+    @Operation(summary = "캐릭터 이미지 재생성 API", description = "특정 캐릭터의 프로필 이미지를 재생성합니다. 이미지 생성에 실패했거나 품질이 좋지 않은 경우 사용합니다.")
+    @PostMapping("/characters/{characterId}/regenerate-image")
+    public ApiResponse<String> regenerateCharacterImage(
+            @Parameter(description = "이미지를 재생성할 캐릭터의 ID") @PathVariable Long characterId) {
+        adminService.regenerateCharacterImage(characterId);
+        return ApiResponse.onSuccess("Character image regeneration has been started.");
+    }
 }
