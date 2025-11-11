@@ -97,10 +97,12 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // 허용할 오리진 설정 (로컬 개발 + Vercel 배포 환경)
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",
-                "https://readwith-frontend-m7lz4exqc-steven25s-projects.vercel.app"
+        // 허용할 오리진 설정 (로컬 개발 + Vercel 배포/프리뷰 환경)
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:5173",                                      // 로컬 개발
+                "https://readwith-frontend.vercel.app",                      // Vercel 메인 배포
+                "https://readwith-frontend-*.vercel.app",                    // Vercel 프리뷰 (브랜치별)
+                "https://*.vercel.app"                                        // Vercel 전체 프리뷰
         ));
 
         // 허용할 HTTP 메서드
