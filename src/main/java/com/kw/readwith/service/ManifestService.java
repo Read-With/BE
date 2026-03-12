@@ -91,6 +91,10 @@ public class ManifestService {
                 .coverImgUrl(book.getCoverImgUrl())
                 .summaryUrl(book.getSummaryUrl())
                 .epubPath(book.getEpubPath())
+                .normalizationStatus(book.getNormalizationStatus())
+                .ruleVersion(book.getRuleVersion())
+                .locatorVersion(book.getLocatorVersion())
+                .normalizedArtifactPath(book.getNormalizedArtifactPath())
                 .build();
     }
 
@@ -107,6 +111,11 @@ public class ManifestService {
                     return ChapterManifestDTO.builder()
                             .idx(chapter.getIdx())
                             .title(chapter.getTitle())
+                            .spineHref(chapter.getSpineHref())
+                            .paragraphCount(chapter.getParagraphCount())
+                            .paragraphStartsJson(chapter.getParagraphStartsJson())
+                            .paragraphLengthsJson(chapter.getParagraphLengthsJson())
+                            .totalCodePoints(chapter.getTotalCodePoints())
                             .startPos(chapter.getStartPos())
                             .endPos(chapter.getEndPos())
                             .rawText(truncateText(chapter.getRawText(), 200)) // 원본 텍스트 일부만

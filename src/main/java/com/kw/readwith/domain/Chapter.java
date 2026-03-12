@@ -29,6 +29,23 @@ public class Chapter extends BaseEntity {
     @Column(length = 200)
     private String title;
 
+    @Column(name = "spine_href", length = 255)
+    private String spineHref;
+
+    @Column(name = "paragraph_count")
+    private Integer paragraphCount;
+
+    @Lob
+    @Column(name = "paragraph_starts_json", columnDefinition = "TEXT")
+    private String paragraphStartsJson;
+
+    @Lob
+    @Column(name = "paragraph_lengths_json", columnDefinition = "TEXT")
+    private String paragraphLengthsJson;
+
+    @Column(name = "total_code_points")
+    private Integer totalCodePoints;
+
     private int pageStart;
     private int pageEnd;
     private int startPos;

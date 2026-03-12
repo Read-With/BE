@@ -602,8 +602,14 @@ public class AdminService {
                         .title(book.getTitle())
                         .author(book.getAuthor())
                         .coverImgUrl(book.getCoverImgUrl())
+                        .epubPath(book.getEpubPath())
+                        .normalizationStatus(book.getNormalizationStatus())
+                        .ruleVersion(book.getRuleVersion())
+                        .locatorVersion(book.getLocatorVersion())
+                        .normalizedArtifactPath(book.getNormalizedArtifactPath())
                         .isDefault(book.isDefault())
                         .isFavorite(false) // 관리자 페이지에서는 즐겨찾기 정보가 불필요
+                        .summary(book.isSummary())
                         .updatedAt(book.getUpdatedAt())
                         .build())
                 .collect(Collectors.toList());
