@@ -27,11 +27,20 @@ public class Bookmark extends BaseEntity {
     @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
-    @Column(name = "start_cfi", nullable = false, length = 500)
-    private String startCfi; // EPUB CFI 시작 위치
+    @Column(name = "start_locator_json", columnDefinition = "TEXT", nullable = false)
+    private String startLocatorJson;
 
-    @Column(name = "end_cfi", length = 500)
-    private String endCfi; // EPUB CFI 끝 위치 (단일 위치 북마크의 경우 null 가능)
+    @Column(name = "end_locator_json", columnDefinition = "TEXT")
+    private String endLocatorJson;
+
+    @Column(name = "start_txt_offset", nullable = false)
+    private Integer startTxtOffset;
+
+    @Column(name = "end_txt_offset")
+    private Integer endTxtOffset;
+
+    @Column(name = "locator_version", length = 50)
+    private String locatorVersion;
 
     @Column(name = "color", length = 7)
     private String color; // HEX 색상 코드 (예: #ffd700)
@@ -59,7 +68,7 @@ public class Bookmark extends BaseEntity {
      * 범위 선택 북마크인지 확인
      */
     public boolean isRangeBookmark() {
-        return endCfi != null && !endCfi.trim().isEmpty();
+        return endLocatorJson != null && !endLocatorJson.trim().isEmpty();
     }
 
     /**

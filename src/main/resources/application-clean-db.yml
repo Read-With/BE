@@ -1,0 +1,27 @@
+spring:
+  main:
+    web-application-type: none
+    lazy-initialization: true
+  datasource:
+    url: ${CLEAN_DB_URL:jdbc:mysql://127.0.0.1:3306/readwith_clean_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${CLEAN_DB_USERNAME:root}
+    password: ${CLEAN_DB_PASSWORD:12341234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: clean-db-client
+            client-secret: clean-db-secret
+  ai:
+    openai:
+      api-key: clean-db-api-key
+
+cloud:
+  aws:
+    credentials:
+      accessKey: clean-db-access-key
+      secretKey: clean-db-secret-key

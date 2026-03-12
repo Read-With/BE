@@ -3,13 +3,17 @@ package com.kw.readwith.service;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
+import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.UserReadState;
+import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.dto.progress.ProgressResponseDTO;
 import com.kw.readwith.dto.progress.SaveProgressRequestDTO;
 import com.kw.readwith.repository.BookRepository;
+import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.UserReadStateRepository;
 import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.util.LocatorSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +29,8 @@ public class UserReadStateService {
     private final UserReadStateRepository userReadStateRepository;
     private final UserRepository userRepository;
     private final BookRepository bookRepository;
+    private final ChapterRepository chapterRepository;
+    private final LocatorSupport locatorSupport;
 
     // 진도 저장 또는 업데이트
     @Transactional
@@ -39,6 +45,9 @@ public class UserReadStateService {
         if (!hasAccessToBook(user, book)) {
             throw new GeneralException(ErrorStatus.BOOK_ACCESS_DENIED);
         }
+        LocatorDTO locator = requestDTO.getLocator();
+        Chapter chapter = validateLocator(book, locator);
+        locatorSupport.toTxtOffset(chapter, locator);
 
         // 기존 읽기 상태가 있는지 확인
         UserReadState userReadState = userReadStateRepository.findByUserIdAndBookId(userId, requestDTO.getBookId())
@@ -49,11 +58,7 @@ public class UserReadStateService {
             userReadState = UserReadState.builder()
                     .user(user)
                     .book(book)
-                    .lastReadChapterIdx(requestDTO.getChapterIdx())
-                    .lastReadEventIdx(requestDTO.getEventIdx())
-                    .cfi(requestDTO.getCfi() != null ? requestDTO.getCfi() : "")
-                    .bookmarks("[]")
-                    .highlights("[]")
+                    .lastLocatorJson(locatorSupport.writeLocator(locator))
                     .build();
         } else {
             // 기존 읽기 상태 업데이트
@@ -61,11 +66,7 @@ public class UserReadStateService {
                     .id(userReadState.getId())
                     .user(user)
                     .book(book)
-                    .lastReadChapterIdx(requestDTO.getChapterIdx())
-                    .lastReadEventIdx(requestDTO.getEventIdx())
-                    .cfi(requestDTO.getCfi() != null ? requestDTO.getCfi() : "")
-                    .bookmarks(userReadState.getBookmarks())
-                    .highlights(userReadState.getHighlights())
+                    .lastLocatorJson(locatorSupport.writeLocator(locator))
                     .build();
         }
 
@@ -140,10 +141,18 @@ public class UserReadStateService {
     // DTO 변환 메서드
     private ProgressResponseDTO convertToResponseDTO(UserReadState userReadState) {
         return ProgressResponseDTO.builder()
-                .chapterIdx(userReadState.getLastReadChapterIdx())
-                .eventIdx(userReadState.getLastReadEventIdx())
-                .cfi(userReadState.getCfi())
                 .bookId(userReadState.getBook().getId())
+                .locator(locatorSupport.readLocator(userReadState.getLastLocatorJson()))
+                .updatedAt(userReadState.getUpdatedAt())
                 .build();
     }
-} 
+
+    private Chapter validateLocator(Book book, LocatorDTO locator) {
+        if (locator == null || locator.getChapterIndex() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "locator.chapterIndex는 필수입니다.");
+        }
+
+        return chapterRepository.findByBookIdAndIdx(book.getId(), locator.getChapterIndex())
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+    }
+}

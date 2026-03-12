@@ -15,7 +15,9 @@ import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.dto.admin.*;
 import com.kw.readwith.dto.book.BookSummaryDTO;
+import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.repository.*;
+import com.kw.readwith.util.LocatorSupport;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +56,7 @@ public class AdminService {
     private final EventCharacterStatRepository statRepository;
     private final ObjectMapper objectMapper;
     private final CharacterImageService characterImageService;
+    private final LocatorSupport locatorSupport;
     
     @PersistenceContext
     private EntityManager entityManager;
@@ -251,18 +254,38 @@ public class AdminService {
                         log.warn("이벤트 ID가 없어 스킵합니다 (파일: {})", filename);
                         continue;
                     }
-                    if (dto.getStart() == null || dto.getEnd() == null) {
+                    if (dto.getChapterIndex() != null && !chapterIdx.equals(dto.getChapterIndex())) {
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "payload chapterIndex와 파일명 chapterIndex가 일치하지 않습니다.");
+                    }
+
+                    Integer startTxtOffset = dto.getStartTxtOffset() != null ? dto.getStartTxtOffset() : dto.getStart();
+                    Integer endTxtOffset = dto.getEndTxtOffset() != null ? dto.getEndTxtOffset() : dto.getEnd();
+                    if (startTxtOffset == null || endTxtOffset == null) {
                         log.warn("이벤트 위치 정보가 없어 스킵합니다 (파일: {}, eventId: {})", filename, dto.getEventId());
                         continue;
                     }
+                    if (startTxtOffset >= endTxtOffset) {
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "이벤트 txtOffset 범위가 올바르지 않습니다: " + dto.getEventId());
+                    }
+
+                    Integer eventIdx = parseEventIdx(dto.getEventId(), chapterIdx);
+                    String normalizedEventId = normalizeEventId(dto.getEventId(), chapterIdx, eventIdx);
+                    LocatorDTO startLocator = resolveEventLocator(chapter, startTxtOffset);
+                    LocatorDTO endLocator = resolveEventLocator(chapter, endTxtOffset);
+                    String rawText = dto.getEventText() != null ? dto.getEventText() : dto.getText();
                     
                     Event event = Event.builder()
                             .book(book)
                             .chapter(chapter)
-                            .idx(dto.getEventId())
-                            .startPos(dto.getStart())
-                            .endPos(dto.getEnd())
-                            .rawText("") // text 필드가 제거되어 빈 문자열로 설정
+                            .idx(eventIdx)
+                            .eventId(normalizedEventId)
+                            .startBlockIndex(startLocator != null ? startLocator.getBlockIndex() : null)
+                            .startOffset(startLocator != null ? startLocator.getOffset() : null)
+                            .endBlockIndex(endLocator != null ? endLocator.getBlockIndex() : null)
+                            .endOffset(endLocator != null ? endLocator.getOffset() : null)
+                            .startTxtOffset(startTxtOffset)
+                            .endTxtOffset(endTxtOffset)
+                            .rawText(rawText != null ? rawText : "")
                             .build();
                     newEventsFromFile.add(event);
                 }
@@ -762,6 +785,37 @@ public class AdminService {
         if (allChaptersSummarized) {
             book.completeSummary();
         }
+    }
+
+    private Integer parseEventIdx(String eventId, Integer chapterIdx) {
+        Matcher matcher = Pattern.compile("^ch(\\d+)-e(\\d+)$").matcher(eventId);
+        if (matcher.matches()) {
+            Integer eventChapterIdx = Integer.parseInt(matcher.group(1));
+            if (!chapterIdx.equals(eventChapterIdx)) {
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventId의 chapterIndex와 업로드 챕터가 일치하지 않습니다.");
+            }
+            return Integer.parseInt(matcher.group(2));
+        }
+
+        try {
+            return Integer.parseInt(eventId);
+        } catch (NumberFormatException e) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventId 형식이 올바르지 않습니다: " + eventId);
+        }
+    }
+
+    private String normalizeEventId(String eventId, Integer chapterIdx, Integer eventIdx) {
+        if (eventId.startsWith("ch")) {
+            return eventId;
+        }
+        return "ch" + chapterIdx + "-e" + eventIdx;
+    }
+
+    private LocatorDTO resolveEventLocator(Chapter chapter, Integer txtOffset) {
+        if (!locatorSupport.hasLocatorMetadata(chapter)) {
+            return null;
+        }
+        return locatorSupport.toLocator(chapter, txtOffset);
     }
 
     /**

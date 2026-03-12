@@ -16,11 +16,26 @@ public class Event extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private Integer startPos;
+    @Column(name = "event_id", nullable = false, length = 50)
+    private String eventId;
 
-    @Column(nullable = false)
-    private Integer endPos;
+    @Column(name = "start_block_index")
+    private Integer startBlockIndex;
+
+    @Column(name = "start_offset")
+    private Integer startOffset;
+
+    @Column(name = "end_block_index")
+    private Integer endBlockIndex;
+
+    @Column(name = "end_offset")
+    private Integer endOffset;
+
+    @Column(name = "start_txt_offset", nullable = false)
+    private Integer startTxtOffset;
+
+    @Column(name = "end_txt_offset", nullable = false)
+    private Integer endTxtOffset;
 
     @Lob
     @Column(columnDefinition = "TEXT", nullable = false)
