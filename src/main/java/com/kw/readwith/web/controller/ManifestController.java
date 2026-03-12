@@ -3,67 +3,72 @@ package com.kw.readwith.web.controller;
 import com.kw.readwith.apiPayload.ApiResponse;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.dto.manifest.ManifestResponseDTO;
 import com.kw.readwith.service.ManifestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/books")
 @RequiredArgsConstructor
-@Tag(name = "Manifest", description = "책 구조 패키지 API")
+@Tag(name = "Manifest", description = "Book manifest API")
 public class ManifestController {
 
     private final ManifestService manifestService;
+    private final V2TransitionGuard transitionGuard;
 
     private Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof Long) {
-            return (Long) authentication.getPrincipal();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return null;
+        }
+        if (authentication.getPrincipal() instanceof Long principal) {
+            return principal;
+        }
+        if ("anonymousUser".equals(authentication.getPrincipal())) {
+            return null;
         }
         throw new GeneralException(ErrorStatus._UNAUTHORIZED);
     }
 
-    /**
-     * 책 구조/캐시 패키지 조회
-     * 책 메타데이터 + 챕터/이벤트 + 인물 정보를 한 번에 제공하여 뷰어 초기화를 돕습니다.
-     * 개인화 데이터(진도, 즐겨찾기, 북마크)는 별도 API에서 조회해야 합니다.
-     */
-    @GetMapping("/{bookId}/manifest")
+    @ModelAttribute
+    void validateTransitionRoute(HttpServletRequest request) {
+        transitionGuard.ensureV2ManifestEnabled(request);
+    }
+
+    @GetMapping({"/api/books/{bookId}/manifest", "/api/v2/books/{bookId}/manifest"})
     @Operation(
-        summary = "책 구조 패키지 조회",
-        description = "책 메타데이터, 챕터/이벤트 구조, 인물 정보를 한 번에 제공합니다. " +
-                     "뷰어 초기화에 필요한 공용 데이터를 포함하며, " +
-                     "개인화 데이터(진도, 즐겨찾기 등)는 별도 API에서 조회해야 합니다."
+            summary = "Get book manifest",
+            description = "Returns the shared manifest payload used to bootstrap the reader."
     )
     @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "200", 
-            description = "책 구조 패키지 조회 성공"
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "404", 
-            description = "책을 찾을 수 없거나 접근 권한이 없음"
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "400", 
-            description = "잘못된 요청 파라미터"
-        )
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Manifest returned successfully"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "Book not found or not accessible"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request"
+            )
     })
     public ApiResponse<ManifestResponseDTO> getBookManifest(
-            @Parameter(
-                description = "책 ID", 
-                required = true,
-                example = "42"
-            )
+            @Parameter(description = "Book ID", required = true, example = "42")
             @PathVariable Long bookId) {
-        
+
         Long userId = getCurrentUserId();
         ManifestResponseDTO response = manifestService.getBookManifest(bookId, userId);
         return ApiResponse.onSuccess(response);

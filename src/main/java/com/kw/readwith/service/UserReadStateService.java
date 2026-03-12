@@ -2,6 +2,7 @@ package com.kw.readwith.service;
 
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.User;
@@ -31,6 +32,7 @@ public class UserReadStateService {
     private final BookRepository bookRepository;
     private final ChapterRepository chapterRepository;
     private final LocatorSupport locatorSupport;
+    private final V2TransitionGuard transitionGuard;
 
     // 진도 저장 또는 업데이트
     @Transactional
@@ -45,8 +47,10 @@ public class UserReadStateService {
         if (!hasAccessToBook(user, book)) {
             throw new GeneralException(ErrorStatus.BOOK_ACCESS_DENIED);
         }
+        transitionGuard.ensureLocatorWritesEnabled("progress 저장");
         LocatorDTO locator = requestDTO.getLocator();
         Chapter chapter = validateLocator(book, locator);
+        transitionGuard.ensureLocatorMetadataReady(book, chapter, "progress 저장");
         locatorSupport.toTxtOffset(chapter, locator);
 
         // 기존 읽기 상태가 있는지 확인

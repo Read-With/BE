@@ -2,6 +2,7 @@ package com.kw.readwith.service;
 
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Bookmark;
 import com.kw.readwith.domain.Chapter;
@@ -32,6 +33,7 @@ public class BookmarkService {
     private final UserRepository userRepository;
     private final ChapterRepository chapterRepository;
     private final LocatorSupport locatorSupport;
+    private final V2TransitionGuard transitionGuard;
 
     /**
      * 북마크 목록 조회
@@ -62,6 +64,7 @@ public class BookmarkService {
         // 사용자와 책 존재 여부 확인
         User user = validateUserExists(userId);
         Book book = validateBookAccess(userId, requestDTO.getBookId());
+        transitionGuard.ensureLocatorWritesEnabled("bookmark 생성");
         ResolvedBookmarkRange resolvedRange = resolveRange(book, requestDTO.getStartLocator(), requestDTO.getEndLocator());
 
         List<Bookmark> existingBookmarks = bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtDesc(userId, requestDTO.getBookId());
@@ -169,6 +172,7 @@ public class BookmarkService {
 
         Chapter startChapter = chapterRepository.findByBookIdAndIdx(book.getId(), startLocator.getChapterIndex())
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        transitionGuard.ensureLocatorMetadataReady(book, startChapter, "bookmark 생성");
         int startTxtOffset = locatorSupport.toTxtOffset(startChapter, startLocator);
 
         if (endLocator == null) {
@@ -184,6 +188,7 @@ public class BookmarkService {
 
         Chapter endChapter = chapterRepository.findByBookIdAndIdx(book.getId(), endLocator.getChapterIndex())
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        transitionGuard.ensureLocatorMetadataReady(book, endChapter, "bookmark 생성");
         int endTxtOffset = locatorSupport.toTxtOffset(endChapter, endLocator);
         if (startTxtOffset >= endTxtOffset) {
             throw new GeneralException(ErrorStatus._BAD_REQUEST, "startLocator는 endLocator보다 앞에 있어야 합니다.");

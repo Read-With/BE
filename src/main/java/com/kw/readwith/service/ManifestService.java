@@ -2,6 +2,7 @@ package com.kw.readwith.service;
 
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
@@ -29,6 +30,7 @@ public class ManifestService {
     private final ChapterRepository chapterRepository;
     private final CharacterRepository characterRepository;
     private final EventRepository eventRepository;
+    private final V2TransitionGuard transitionGuard;
 
     /**
      * 책 구조/캐시 패키지 조회
@@ -48,6 +50,7 @@ public class ManifestService {
         List<Event> events = eventRepository.findByBookOrderByChapterIdxAscIdxAsc(book);
         Map<Long, List<Event>> eventsByChapter = events.stream()
                 .collect(Collectors.groupingBy(event -> event.getChapter().getId()));
+        transitionGuard.ensureManifestReady(book, chapters, events);
         
         // 5. Progress 메타데이터 계산
         ProgressMetadataDTO progressMetadata = calculateProgressMetadata(book);
