@@ -30,11 +30,11 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     Integer findMaxChapterIdxByBook(@Param("book") Book book);
 
     /**
-     * 특정 책의 각 챕터별 글자수 조회 (마지막 이벤트의 endPos 사용)
+     * 특정 책의 각 챕터별 글자수 조회 (totalCodePoints 우선, 없으면 마지막 이벤트 endPos)
      */
-    @Query("SELECT c.idx, COALESCE(MAX(e.endPos), 0) FROM Chapter c " +
+    @Query("SELECT c.idx, COALESCE(c.totalCodePoints, COALESCE(MAX(e.endPos), 0)) FROM Chapter c " +
            "LEFT JOIN c.events e WHERE c.book = :book " +
-           "GROUP BY c.idx ORDER BY c.idx")
+           "GROUP BY c.idx, c.totalCodePoints ORDER BY c.idx")
     List<Object[]> findChapterLengthsByBook(@Param("book") Book book);
 
 }

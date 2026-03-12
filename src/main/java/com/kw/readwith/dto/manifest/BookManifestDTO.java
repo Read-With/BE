@@ -51,4 +51,24 @@ public class BookManifestDTO {
      * EPUB 파일 경로
      */
     private String epubPath;
+
+    /**
+     * 정규화 상태
+     */
+    private String normalizationStatus;
+
+    /**
+     * 정규화 규칙 버전
+     */
+    private String ruleVersion;
+
+    /**
+     * locator 버전
+     */
+    private String locatorVersion;
+
+    /**
+     * 정규화 산출물 경로
+     */
+    private String normalizedArtifactPath;
 }

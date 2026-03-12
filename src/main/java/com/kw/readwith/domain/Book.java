@@ -44,6 +44,18 @@ public class Book extends BaseEntity {
     @Column(name = "epub_path", length = 255)
     private String epubPath;
 
+    @Column(name = "normalization_status", length = 30)
+    private String normalizationStatus;
+
+    @Column(name = "rule_version", length = 50)
+    private String ruleVersion;
+
+    @Column(name = "locator_version", length = 50)
+    private String locatorVersion;
+
+    @Column(name = "normalized_artifact_path", length = 255)
+    private String normalizedArtifactPath;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_user_id")
     private User uploadedBy;   // null == 서버 기본 제공
