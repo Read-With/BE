@@ -10,6 +10,7 @@ import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.dto.graph.*;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,7 @@ public class FineGraphService {
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final EventCharacterStatRepository eventCharacterStatRepository;
     private final ObjectMapper objectMapper;
+    private final V2TransitionGuard transitionGuard;
 
     /**
      * 세밀(이벤트) 그래프 조회 - 특정 이벤트에서의 관계
@@ -51,6 +53,7 @@ public class FineGraphService {
         // 이벤트 존재 확인
         Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
+        transitionGuard.ensureEventLocatorReady(event, "fine graph 조회");
 
         // 해당 이벤트의 모든 관계 엣지 조회
         List<EventRelationshipEdge> edges = eventRelationshipEdgeRepository.findByEvent(event);

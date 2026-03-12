@@ -68,6 +68,17 @@ spring:
           quality: standard
           n: 1
 
+epub:
+  normalization:
+    enabled: ${EPUB_NORMALIZATION_ENABLED:false}
+
+locator:
+  mode: ${LOCATOR_MODE:on}
+
+api:
+  contract:
+    mode: ${API_CONTRACT_MODE:prepare}
+
 # JWT 설정
 jwt:
   secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890123456789012345678901234567890}

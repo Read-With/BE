@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/progress")
+@RequestMapping({"/api/progress", "/api/v2/progress"})
 @RequiredArgsConstructor
 @Tag(name = "Progress", description = "독서 진도 관련 API")
 public class ProgressController {

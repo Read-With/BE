@@ -4,32 +4,42 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.filter.ShallowEtagHeaderFilter;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
+    private final V2ApiContractInterceptor v2ApiContractInterceptor;
+
+    public WebConfig(V2ApiContractInterceptor v2ApiContractInterceptor) {
+        this.v2ApiContractInterceptor = v2ApiContractInterceptor;
+    }
+
     /**
-     * Spring의 자동 ETag 지원을 위한 ShallowEtagHeaderFilter 설정
+     * Spring???먮룞 ETag 吏?먯쓣 ?꾪븳 ShallowEtagHeaderFilter ?ㅼ젙
      *
-     * 동작 원리:
-     * 1. 응답 본문의 MD5 해시값으로 ETag 자동 생성
-     * 2. 클라이언트의 If-None-Match 헤더와 비교
-     * 3. 동일하면 304 Not Modified 응답 (본문 없음)
-     * 4. 다르면 200 OK 응답 (본문 포함)
+     * ?숈옉 ?먮━:
+     * 1. ?묐떟 蹂몃Ц??MD5 ?댁떆媛믪쑝濡?ETag ?먮룞 ?앹꽦
+     * 2. ?대씪?댁뼵?몄쓽 If-None-Match ?ㅻ뜑? 鍮꾧탳
+     * 3. ?숈씪?섎㈃ 304 Not Modified ?묐떟 (蹂몃Ц ?놁쓬)
+     * 4. ?ㅻⅤ硫?200 OK ?묐떟 (蹂몃Ц ?ы븿)
      */
     @Bean
     public FilterRegistrationBean<ShallowEtagHeaderFilter> shallowEtagHeaderFilter() {
-        FilterRegistrationBean<ShallowEtagHeaderFilter> filterRegistrationBean = 
-            new FilterRegistrationBean<>(new ShallowEtagHeaderFilter());
-        
-        // Manifest API에만 ETag 적용
+        FilterRegistrationBean<ShallowEtagHeaderFilter> filterRegistrationBean =
+                new FilterRegistrationBean<>(new ShallowEtagHeaderFilter());
+
         filterRegistrationBean.addUrlPatterns("/api/books/*/manifest");
-        
-        // 필터 순서 설정 (낮을수록 먼저 실행)
+        filterRegistrationBean.addUrlPatterns("/api/v2/books/*/manifest");
         filterRegistrationBean.setOrder(1);
-        
+
         return filterRegistrationBean;
     }
 
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(v2ApiContractInterceptor)
+                .addPathPatterns("/api/**", "/api/v2/**");
+    }
 }

@@ -16,7 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/graph")
+@RequestMapping({"/api/graph", "/api/v2/graph"})
 @RequiredArgsConstructor
 @Tag(name = "Graph", description = "인물 관계 그래프 API")
 public class GraphController {

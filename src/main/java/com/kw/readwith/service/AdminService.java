@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
@@ -57,6 +58,7 @@ public class AdminService {
     private final ObjectMapper objectMapper;
     private final CharacterImageService characterImageService;
     private final LocatorSupport locatorSupport;
+    private final V2TransitionGuard transitionGuard;
     
     @PersistenceContext
     private EntityManager entityManager;
@@ -191,6 +193,7 @@ public class AdminService {
         
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        transitionGuard.ensureLocatorWritesEnabled("admin event upload");
 
         List<Event> allNewEvents = new ArrayList<>();
         // 파일명에서 챕터 번호를 추출하기 위한 정규표현식
@@ -232,6 +235,7 @@ public class AdminService {
                                 .build();
                         return chapterRepository.save(newChapter);
                     });
+            transitionGuard.ensureLocatorMetadataReady(book, chapter, "admin event upload");
 
             // 이미 데이터가 있는 챕터는 업로드 불가
             if (eventRepository.existsByChapter(chapter)) {
