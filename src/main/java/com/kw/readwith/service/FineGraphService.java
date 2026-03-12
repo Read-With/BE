@@ -6,6 +6,7 @@ import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
+import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.dto.graph.*;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
@@ -73,8 +74,11 @@ public class FineGraphService {
         EventInfoDTO eventInfo = EventInfoDTO.builder()
                 .chapterIdx(chapterIdx)
                 .eventIdx(eventIdx)
-                .start(event.getStartPos())
-                .end(event.getEndPos())
+                .eventId(event.getEventId())
+                .startLocator(buildEventLocator(event, true))
+                .endLocator(buildEventLocator(event, false))
+                .startTxtOffset(event.getStartTxtOffset())
+                .endTxtOffset(event.getEndTxtOffset())
                 .build();
 
         return FineGraphResponseDTO.builder()
@@ -171,5 +175,19 @@ public class FineGraphService {
             log.warn("Failed to parse names: {}, using fallback: {}", names, fallbackName, e);
             return List.of(fallbackName);
         }
+    }
+
+    private LocatorDTO buildEventLocator(Event event, boolean isStart) {
+        Integer blockIndex = isStart ? event.getStartBlockIndex() : event.getEndBlockIndex();
+        Integer offset = isStart ? event.getStartOffset() : event.getEndOffset();
+        if (blockIndex == null || offset == null || event.getChapter() == null) {
+            return null;
+        }
+
+        return LocatorDTO.builder()
+                .chapterIndex(event.getChapter().getIdx())
+                .blockIndex(blockIndex)
+                .offset(offset)
+                .build();
     }
 }

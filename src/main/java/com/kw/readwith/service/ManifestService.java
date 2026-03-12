@@ -6,6 +6,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
+import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.dto.manifest.*;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -135,8 +136,11 @@ public class ManifestService {
         return events.stream()
                 .map(event -> EventManifestDTO.builder()
                         .idx(event.getIdx())
-                        .startPos(event.getStartPos())
-                        .endPos(event.getEndPos())
+                        .eventId(event.getEventId())
+                        .startLocator(buildEventLocator(event, true))
+                        .endLocator(buildEventLocator(event, false))
+                        .startTxtOffset(event.getStartTxtOffset())
+                        .endTxtOffset(event.getEndTxtOffset())
                         .rawText(truncateText(event.getRawText(), 300)) // 원본 텍스트 일부
                         .build())
                 .collect(Collectors.toList());
@@ -207,5 +211,19 @@ public class ManifestService {
         }
         
         return cleanText.substring(0, maxLength - 3) + "...";
+    }
+
+    private LocatorDTO buildEventLocator(Event event, boolean isStart) {
+        Integer blockIndex = isStart ? event.getStartBlockIndex() : event.getEndBlockIndex();
+        Integer offset = isStart ? event.getStartOffset() : event.getEndOffset();
+        if (blockIndex == null || offset == null || event.getChapter() == null) {
+            return null;
+        }
+
+        return LocatorDTO.builder()
+                .chapterIndex(event.getChapter().getIdx())
+                .blockIndex(blockIndex)
+                .offset(offset)
+                .build();
     }
 }

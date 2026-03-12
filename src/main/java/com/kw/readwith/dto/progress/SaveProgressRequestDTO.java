@@ -1,5 +1,7 @@
 package com.kw.readwith.dto.progress;
 
+import com.kw.readwith.dto.common.LocatorDTO;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 @Getter
@@ -8,12 +10,10 @@ import lombok.*;
 @AllArgsConstructor
 public class SaveProgressRequestDTO {
 
+    @NotNull(message = "책 ID는 필수입니다.")
     private Long bookId;
 
-    private Integer chapterIdx;
-
-    private Integer eventIdx;       // null = 챕터 끝
-
-    private String  cfi;            // epubcfi(...)  ← nullable
+    @NotNull(message = "locator는 필수입니다.")
+    private LocatorDTO locator;
 
 }

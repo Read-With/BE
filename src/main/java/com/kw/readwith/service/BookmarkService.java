@@ -4,13 +4,17 @@ import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Bookmark;
+import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.User;
+import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.dto.bookmark.BookmarkResponseDTO;
 import com.kw.readwith.dto.bookmark.CreateBookmarkRequestDTO;
 import com.kw.readwith.dto.bookmark.UpdateBookmarkRequestDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.BookmarkRepository;
+import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.util.LocatorSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +30,8 @@ public class BookmarkService {
     private final BookmarkRepository bookmarkRepository;
     private final BookRepository bookRepository;
     private final UserRepository userRepository;
+    private final ChapterRepository chapterRepository;
+    private final LocatorSupport locatorSupport;
 
     /**
      * 북마크 목록 조회
@@ -44,7 +50,7 @@ public class BookmarkService {
         }
 
         return bookmarks.stream()
-                .map(BookmarkResponseDTO::from)
+                .map(this::convertToResponseDTO)
                 .collect(Collectors.toList());
     }
 
@@ -56,12 +62,10 @@ public class BookmarkService {
         // 사용자와 책 존재 여부 확인
         User user = validateUserExists(userId);
         Book book = validateBookAccess(userId, requestDTO.getBookId());
+        ResolvedBookmarkRange resolvedRange = resolveRange(book, requestDTO.getStartLocator(), requestDTO.getEndLocator());
 
-        // 겹치는 북마크 확인
-        List<Bookmark> overlappingBookmarks = bookmarkRepository.findOverlappingBookmarks(
-                userId, requestDTO.getBookId(), requestDTO.getStartCfi(), requestDTO.getEndCfi());
-        
-        if (!overlappingBookmarks.isEmpty()) {
+        List<Bookmark> existingBookmarks = bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtDesc(userId, requestDTO.getBookId());
+        if (hasDuplicateOrOverlap(existingBookmarks, resolvedRange)) {
             throw new GeneralException(ErrorStatus.BOOKMARK_ALREADY_EXISTS);
         }
 
@@ -69,14 +73,17 @@ public class BookmarkService {
         Bookmark bookmark = Bookmark.builder()
                 .user(user)
                 .book(book)
-                .startCfi(requestDTO.getStartCfi())
-                .endCfi(requestDTO.getEndCfi())
+                .startLocatorJson(locatorSupport.writeLocator(requestDTO.getStartLocator()))
+                .endLocatorJson(locatorSupport.writeLocator(requestDTO.getEndLocator()))
+                .startTxtOffset(resolvedRange.startTxtOffset())
+                .endTxtOffset(resolvedRange.endTxtOffset())
+                .locatorVersion(book.getLocatorVersion())
                 .color(requestDTO.getColor())
                 .memo(requestDTO.getMemo())
                 .build();
 
         Bookmark savedBookmark = bookmarkRepository.save(bookmark);
-        return BookmarkResponseDTO.from(savedBookmark);
+        return convertToResponseDTO(savedBookmark);
     }
 
     /**
@@ -90,7 +97,7 @@ public class BookmarkService {
         // 북마크 업데이트
         bookmark.updateBookmark(requestDTO.getColor(), requestDTO.getMemo());
 
-        return BookmarkResponseDTO.from(bookmark);
+        return convertToResponseDTO(bookmark);
     }
 
     /**
@@ -136,5 +143,85 @@ public class BookmarkService {
     private Bookmark validateBookmarkOwnership(Long userId, Long bookmarkId) {
         return bookmarkRepository.findByIdAndUserId(bookmarkId, userId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOKMARK_NOT_FOUND));
+    }
+
+    private BookmarkResponseDTO convertToResponseDTO(Bookmark bookmark) {
+        return BookmarkResponseDTO.builder()
+                .id(bookmark.getId())
+                .bookId(bookmark.getBook().getId())
+                .startLocator(locatorSupport.readLocator(bookmark.getStartLocatorJson()))
+                .endLocator(locatorSupport.readLocator(bookmark.getEndLocatorJson()))
+                .startTxtOffset(bookmark.getStartTxtOffset())
+                .endTxtOffset(bookmark.getEndTxtOffset())
+                .locatorVersion(bookmark.getLocatorVersion())
+                .color(bookmark.getColor())
+                .memo(bookmark.getMemo())
+                .isRangeBookmark(bookmark.isRangeBookmark())
+                .createdAt(bookmark.getCreatedAt())
+                .updatedAt(bookmark.getUpdatedAt())
+                .build();
+    }
+
+    private ResolvedBookmarkRange resolveRange(Book book, LocatorDTO startLocator, LocatorDTO endLocator) {
+        if (startLocator == null || startLocator.getChapterIndex() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "startLocator.chapterIndex는 필수입니다.");
+        }
+
+        Chapter startChapter = chapterRepository.findByBookIdAndIdx(book.getId(), startLocator.getChapterIndex())
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        int startTxtOffset = locatorSupport.toTxtOffset(startChapter, startLocator);
+
+        if (endLocator == null) {
+            return new ResolvedBookmarkRange(startTxtOffset, null);
+        }
+        if (endLocator.getChapterIndex() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "endLocator.chapterIndex는 필수입니다.");
+        }
+
+        if (!startLocator.getChapterIndex().equals(endLocator.getChapterIndex())) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "북마크 범위는 동일 챕터 내에서만 저장할 수 있습니다.");
+        }
+
+        Chapter endChapter = chapterRepository.findByBookIdAndIdx(book.getId(), endLocator.getChapterIndex())
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        int endTxtOffset = locatorSupport.toTxtOffset(endChapter, endLocator);
+        if (startTxtOffset >= endTxtOffset) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "startLocator는 endLocator보다 앞에 있어야 합니다.");
+        }
+
+        return new ResolvedBookmarkRange(startTxtOffset, endTxtOffset);
+    }
+
+    private boolean hasDuplicateOrOverlap(List<Bookmark> existingBookmarks, ResolvedBookmarkRange newRange) {
+        for (Bookmark existing : existingBookmarks) {
+            boolean exactSamePoint = existing.getStartTxtOffset().equals(newRange.startTxtOffset())
+                    && existing.getEndTxtOffset() == null
+                    && newRange.endTxtOffset() == null;
+            boolean exactSameRange = existing.getStartTxtOffset().equals(newRange.startTxtOffset())
+                    && equalsNullable(existing.getEndTxtOffset(), newRange.endTxtOffset());
+
+            if (exactSamePoint || exactSameRange) {
+                return true;
+            }
+
+            if (existing.getEndTxtOffset() != null && newRange.endTxtOffset() != null) {
+                boolean overlaps = existing.getStartTxtOffset() < newRange.endTxtOffset()
+                        && existing.getEndTxtOffset() > newRange.startTxtOffset();
+                if (overlaps) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean equalsNullable(Integer left, Integer right) {
+        if (left == null) {
+            return right == null;
+        }
+        return left.equals(right);
+    }
+
+    private record ResolvedBookmarkRange(Integer startTxtOffset, Integer endTxtOffset) {
     }
 }

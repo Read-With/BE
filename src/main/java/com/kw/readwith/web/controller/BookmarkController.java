@@ -54,7 +54,7 @@ public class BookmarkController {
      * 북마크 생성
      */
     @PostMapping
-    @Operation(summary = "북마크 생성", description = "새로운 북마크를 생성합니다. startCfi는 필수이며, endCfi는 범위 선택 시에만 제공합니다.")
+    @Operation(summary = "북마크 생성", description = "새로운 북마크를 생성합니다. startLocator는 필수이며, endLocator는 범위 선택 시에만 제공합니다.")
     public ApiResponse<BookmarkResponseDTO> createBookmark(
             @Valid @RequestBody CreateBookmarkRequestDTO requestDTO) {
         

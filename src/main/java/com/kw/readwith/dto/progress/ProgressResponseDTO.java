@@ -1,6 +1,9 @@
 package com.kw.readwith.dto.progress;
 
+import com.kw.readwith.dto.common.LocatorDTO;
 import lombok.*;
+
+import java.time.LocalDateTime;
 
 @Getter
 @Builder
@@ -8,12 +11,10 @@ import lombok.*;
 @AllArgsConstructor
 public class ProgressResponseDTO {
 
-    Integer chapterIdx;
+    private Long bookId;
 
-    Integer eventIdx;
+    private LocatorDTO locator;
 
-    String  cfi;
-
-    Long bookId;
+    private LocalDateTime updatedAt;
 
 }

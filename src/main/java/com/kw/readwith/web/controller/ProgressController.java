@@ -4,6 +4,7 @@ import com.kw.readwith.apiPayload.ApiResponse;
 import com.kw.readwith.dto.progress.ProgressResponseDTO;
 import com.kw.readwith.dto.progress.SaveProgressRequestDTO;
 import com.kw.readwith.service.UserReadStateService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -23,7 +24,7 @@ public class ProgressController {
     // 진도 저장/업데이트
     @PostMapping
     @Operation(summary = "독서 진도 저장/업데이트", description = "사용자의 독서 진도를 저장하거나 업데이트합니다.")
-    public ApiResponse<ProgressResponseDTO> saveProgress(@RequestBody SaveProgressRequestDTO requestDTO, Authentication authentication) {
+    public ApiResponse<ProgressResponseDTO> saveProgress(@Valid @RequestBody SaveProgressRequestDTO requestDTO, Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         ProgressResponseDTO response = userReadStateService.saveProgress(userId, requestDTO);
         return ApiResponse.onSuccess(response);

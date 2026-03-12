@@ -5,9 +5,6 @@ import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 /* ─────────────── UserReadState ────────────────────────── */
 @Entity
 @Getter
@@ -25,20 +22,6 @@ public class UserReadState extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(nullable = false)
     private Book book;
 
-    @Column(nullable = false)
-    private Integer lastReadChapterIdx;
-
-    @Column(nullable = false)
-    private Integer lastReadEventIdx;
-
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String cfi;                   // EPUB CFI
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "json")
-    private String bookmarks;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "json")
-    private String highlights;
+    @Column(name = "last_locator_json", columnDefinition = "TEXT", nullable = false)
+    private String lastLocatorJson;
 }
