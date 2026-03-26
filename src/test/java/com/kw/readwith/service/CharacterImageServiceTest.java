@@ -139,7 +139,7 @@ class CharacterImageServiceTest {
                 .thenReturn(mockS3Url);
 
         // When: 이미지 생성 실행
-        characterImageService.generateAndSaveImage(testCharacter1);
+        characterImageService.generateAndSaveImage(testCharacter1.getId());
 
         // Then: 검증
         // 1. DALL-E API 호출 확인
@@ -178,7 +178,7 @@ class CharacterImageServiceTest {
 
         // When & Then: 예외가 발생하고 폴백 처리됨
         try {
-            characterImageService.generateAndSaveImage(testCharacter1);
+            characterImageService.generateAndSaveImage(testCharacter1.getId());
         } catch (Exception e) {
             // 예외는 발생하지만 폴백은 처리되어야 함
         }
@@ -208,7 +208,7 @@ class CharacterImageServiceTest {
                 .build();
 
         // 캐릭터 2는 아직 생성 안됨
-        List<Character> characters = Arrays.asList(completedCharacter, testCharacter2);
+        List<Long> characters = Arrays.asList(completedCharacter.getId(), testCharacter2.getId());
 
         // DALL-E API 모킹
         ImageResponse mockImageResponse = mock(ImageResponse.class);

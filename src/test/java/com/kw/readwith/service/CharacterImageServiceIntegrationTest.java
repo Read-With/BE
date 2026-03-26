@@ -99,7 +99,7 @@ class CharacterImageServiceIntegrationTest {
 
         // When: 실제 이미지 생성 실행
         long startTime = System.currentTimeMillis();
-        characterImageService.generateAndSaveImage(testCharacter);
+        characterImageService.generateAndSaveImage(testCharacter.getId());
         long endTime = System.currentTimeMillis();
 
         // Then: DB에서 업데이트된 캐릭터 정보 조회
@@ -155,7 +155,7 @@ class CharacterImageServiceIntegrationTest {
         character1 = characterRepository.save(character1);
         character2 = characterRepository.save(character2);
 
-        List<Character> characters = Arrays.asList(character1, character2);
+        List<Long> characters = Arrays.asList(character1.getId(), character2.getId());
 
         System.out.println("📌 생성할 캐릭터:");
         System.out.println("   1. " + character1.getName() + " (ID: " + character1.getId() + ")");
@@ -241,7 +241,7 @@ class CharacterImageServiceIntegrationTest {
         String originalUrl = completedCharacter.getProfileImage();
 
         // When: 이미지 생성 시도
-        characterImageService.generateImagesAsync(Arrays.asList(completedCharacter));
+        characterImageService.generateImagesAsync(Arrays.asList(completedCharacter.getId()));
 
         // Then: URL이 변경되지 않아야 함
         Character afterCharacter = characterRepository.findById(completedCharacter.getId()).orElseThrow();
