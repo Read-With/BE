@@ -8,6 +8,8 @@ import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
+import com.kw.readwith.domain.enums.AnalysisStatus;
+import com.kw.readwith.domain.enums.NormalizationStatus;
 import com.kw.readwith.domain.enums.Provider;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -83,6 +85,12 @@ public class DataLoader implements CommandLineRunner {
                 .author("J.K. 롤링")
                 .language("ko")
                 .isDefault(true)
+                .normalizationStatus(NormalizationStatus.READY)
+                .analysisStatus(AnalysisStatus.READY)
+                .ruleVersion("seed-v1")
+                .locatorVersion("v2")
+                .normalizationRunId("seed")
+                .normalizedArtifactPath("books/1/normalizations/seed")
                 .coverImgUrl("https://example.com/covers/harry_potter.jpg")
                 .epubPath("https://example.com/epubs/harry_potter.epub")
                 .uploadedBy(null)  // null = 서버 기본 제공
@@ -95,6 +103,12 @@ public class DataLoader implements CommandLineRunner {
                 .author("J.R.R. 톨킨")
                 .language("ko")
                 .isDefault(true)
+                .normalizationStatus(NormalizationStatus.READY)
+                .analysisStatus(AnalysisStatus.READY)
+                .ruleVersion("seed-v1")
+                .locatorVersion("v2")
+                .normalizationRunId("seed")
+                .normalizedArtifactPath("books/2/normalizations/seed")
                 .coverImgUrl("https://example.com/covers/lotr.jpg")
                 .epubPath("https://example.com/epubs/lotr.epub")
                 .uploadedBy(null)  // null = 서버 기본 제공

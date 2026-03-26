@@ -40,6 +40,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.jsoup:jsoup:1.18.1'
 
 	// SWAGGER
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
@@ -70,6 +71,15 @@ dependencyManagement {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+tasks.register('gutenbergRegressionTest', Test) {
+	useJUnitPlatform()
+	description = 'Runs normalization regression against local Project Gutenberg EPUB samples.'
+	group = 'verification'
+	filter {
+		includeTestsMatching 'com.kw.readwith.service.GutenbergNormalizationRegressionTest'
+	}
 }
 
 jar {

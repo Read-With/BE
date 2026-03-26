@@ -9,12 +9,12 @@ import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.service.normalization.NormalizationVersionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,26 +24,28 @@ public class FavoriteService {
     private final FavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
     private final BookRepository bookRepository;
+    private final BookAccessPolicy bookAccessPolicy;
+    private final NormalizationVersionService normalizationVersionService;
 
-    // 즐겨찾기 추가
     @Transactional
     public void addFavorite(Long userId, Long bookId) {
         Favorite existing = favoriteRepository.findByUserIdAndBookId(userId, bookId);
-        if (existing != null) return; // 이미 존재
+        if (existing != null) {
+            return;
+        }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+        bookAccessPolicy.ensureReadable(book, userId);
 
-        Favorite favorite = Favorite.builder()
+        favoriteRepository.save(Favorite.builder()
                 .user(user)
                 .book(book)
-                .build();
-        favoriteRepository.save(favorite);
+                .build());
     }
 
-    // 즐겨찾기 삭제
     @Transactional
     public void removeFavorite(Long userId, Long bookId) {
         Favorite favorite = favoriteRepository.findByUserIdAndBookId(userId, bookId);
@@ -52,26 +54,33 @@ public class FavoriteService {
         }
     }
 
-    // 즐겨찾기 목록 조회
     public List<BookSummaryDTO> getFavoriteBooks(Long userId) {
-        List<Favorite> favorites = favoriteRepository.findByUserId(userId);
-        return favorites.stream()
+        return favoriteRepository.findByUserId(userId).stream()
                 .map(Favorite::getBook)
+                .filter(book -> bookAccessPolicy.isReadable(book, userId))
                 .map(book -> BookSummaryDTO.builder()
                         .id(book.getId())
                         .title(book.getTitle())
                         .author(book.getAuthor())
                         .coverImgUrl(book.getCoverImgUrl())
                         .epubPath(book.getEpubPath())
-                        .normalizationStatus(book.getNormalizationStatus())
+                        .normalizationStatus(enumName(book.getNormalizationStatus()))
+                        .analysisStatus(enumName(book.getAnalysisStatus()))
                         .ruleVersion(book.getRuleVersion())
                         .locatorVersion(book.getLocatorVersion())
+                        .normalizationRunId(book.getNormalizationRunId())
+                        .normalizationVersionStatus(normalizationVersionService.resolveStatus(book).name())
+                        .needsRenormalization(normalizationVersionService.needsRenormalization(book))
                         .normalizedArtifactPath(book.getNormalizedArtifactPath())
                         .isDefault(book.isDefault())
                         .isFavorite(true)
                         .summary(book.isSummary())
                         .updatedAt(book.getUpdatedAt())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
     }
-} 
+
+    private String enumName(Enum<?> value) {
+        return value == null ? null : value.name();
+    }
+}

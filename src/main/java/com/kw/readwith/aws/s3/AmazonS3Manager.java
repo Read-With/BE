@@ -9,83 +9,97 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Base64;
 import java.util.UUID;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class AmazonS3Manager{
+public class AmazonS3Manager {
 
     private final AmazonS3 amazonS3;
-
     private final AmazonConfig amazonConfig;
 
-    public String uploadFile(String keyName, MultipartFile file){
+    public String uploadFile(String keyName, MultipartFile file) {
         ObjectMetadata metadata = new ObjectMetadata();
         metadata.setContentLength(file.getSize());
         metadata.setContentType(file.getContentType());
-        try {
-            amazonS3.putObject(new PutObjectRequest(amazonConfig.getBucket(), keyName, file.getInputStream(), metadata)
-                    );
-        }catch (IOException e){
-            log.error("error at AmazonS3Manager uploadFile : {}", (Object) e.getStackTrace());
+        try (InputStream inputStream = file.getInputStream()) {
+            amazonS3.putObject(new PutObjectRequest(amazonConfig.getBucket(), keyName, inputStream, metadata));
+        } catch (IOException e) {
+            throw new IllegalStateException("S3 파일 업로드에 실패했습니다. key=" + keyName, e);
         }
+        return getObjectUrl(keyName);
+    }
 
+    public void uploadBytes(String keyName, byte[] content, String contentType) {
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentLength(content.length);
+        metadata.setContentType(contentType);
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(content)) {
+            amazonS3.putObject(new PutObjectRequest(amazonConfig.getBucket(), keyName, inputStream, metadata));
+        } catch (IOException e) {
+            throw new IllegalStateException("S3 바이트 업로드에 실패했습니다. key=" + keyName, e);
+        }
+    }
+
+    public byte[] downloadFile(String keyName) {
+        try (InputStream inputStream = amazonS3.getObject(amazonConfig.getBucket(), keyName).getObjectContent()) {
+            return inputStream.readAllBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("S3 파일 다운로드에 실패했습니다. key=" + keyName, e);
+        }
+    }
+
+    public String getObjectUrl(String keyName) {
         return amazonS3.getUrl(amazonConfig.getBucket(), keyName).toString();
     }
 
-    public String uploadFileFromBase64(String keyName, String base64Data, String contentType){
-        // 디코딩 전 모든 공백 문자 제거
+    public String uploadFileFromBase64(String keyName, String base64Data, String contentType) {
         base64Data = base64Data.replaceAll("\\s+", "");
-        // Base64 디코딩
         byte[] fileContent = Base64.getDecoder().decode(base64Data);
-
-        // Base64를 MultipartFile 객체로 변환
-        // contentType("image/png") 등 실제 타입에 맞춰서 설정
-        MultipartFile multipartFile =
-                new Base64ToMultipartFile(fileContent, keyName, contentType);
-
-        // uploadFile() 호출
+        MultipartFile multipartFile = new Base64ToMultipartFile(fileContent, keyName, contentType);
         return uploadFile(keyName, multipartFile);
     }
 
-    public String uploadOriginal(String title, MultipartFile file){
+    public String uploadOriginal(String title, MultipartFile file) {
         String slug = slugify(title);
         String ext = getExtension(file.getOriginalFilename());
-        String keyName = amazonConfig.getOriginal()+"/"+slug+ext;
+        String keyName = amazonConfig.getOriginal() + "/" + slug + ext;
         return uploadFile(keyName, file);
     }
 
-    public String uploadMetadata(String title, MultipartFile file){
+    public String uploadMetadata(String title, MultipartFile file) {
         String slug = slugify(title);
         String uniqueName = generateUniqueFileName(file.getOriginalFilename());
-        String keyName = amazonConfig.getMetadata()+"/"+slug+"/"+uniqueName;
+        String keyName = amazonConfig.getMetadata() + "/" + slug + "/" + uniqueName;
         return uploadFile(keyName, file);
     }
 
-    private String slugify(String input){
+    private String slugify(String input) {
         String slug = input.toLowerCase()
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("^-|-$", "");
         return slug.length() > 0 ? slug : UUID.randomUUID().toString();
     }
 
-    private String getExtension(String filename){
+    private String getExtension(String filename) {
         int idx = filename.lastIndexOf('.');
-        if(idx > -1){
+        if (idx > -1) {
             return filename.substring(idx);
         }
         return "";
     }
 
-    private String generateUniqueFileName(String originalFilename){
+    private String generateUniqueFileName(String originalFilename) {
         String ext = "";
         int idx = originalFilename.lastIndexOf('.');
-        if(idx > -1){
+        if (idx > -1) {
             ext = originalFilename.substring(idx);
         }
-        return UUID.randomUUID().toString()+ext;
+        return UUID.randomUUID() + ext;
     }
 }

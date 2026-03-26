@@ -12,4 +12,6 @@ import org.springframework.stereotype.Component;
 public class EpubNormalizationProperties {
 
     private boolean enabled = false;
+    private String ruleVersion = "v1";
+    private String locatorVersion = "v2";
 }

@@ -18,6 +18,7 @@ import com.kw.readwith.dto.admin.*;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.repository.*;
+import com.kw.readwith.service.normalization.NormalizationVersionService;
 import com.kw.readwith.util.LocatorSupport;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -59,6 +60,7 @@ public class AdminService {
     private final CharacterImageService characterImageService;
     private final LocatorSupport locatorSupport;
     private final V2TransitionGuard transitionGuard;
+    private final NormalizationVersionService normalizationVersionService;
     
     @PersistenceContext
     private EntityManager entityManager;
@@ -622,7 +624,9 @@ public class AdminService {
      * 전체 요약이 완료되지 않은 책 목록을 조회합니다.
      */
     public List<BookSummaryDTO> getUnsummarizedBooks() {
-        List<Book> books = bookRepository.findBySummaryIsFalse();
+        List<Book> books = bookRepository.findBySummaryIsFalse().stream()
+                .filter(Book::isNormalizationReady)
+                .toList();
         return books.stream()
                 .map(book -> BookSummaryDTO.builder()
                         .id(book.getId())
@@ -630,9 +634,13 @@ public class AdminService {
                         .author(book.getAuthor())
                         .coverImgUrl(book.getCoverImgUrl())
                         .epubPath(book.getEpubPath())
-                        .normalizationStatus(book.getNormalizationStatus())
+                        .normalizationStatus(book.getNormalizationStatus() != null ? book.getNormalizationStatus().name() : null)
+                        .analysisStatus(book.getAnalysisStatus() != null ? book.getAnalysisStatus().name() : null)
                         .ruleVersion(book.getRuleVersion())
                         .locatorVersion(book.getLocatorVersion())
+                        .normalizationRunId(book.getNormalizationRunId())
+                        .normalizationVersionStatus(normalizationVersionService.resolveStatus(book).name())
+                        .needsRenormalization(normalizationVersionService.needsRenormalization(book))
                         .normalizedArtifactPath(book.getNormalizedArtifactPath())
                         .isDefault(book.isDefault())
                         .isFavorite(false) // 관리자 페이지에서는 즐겨찾기 정보가 불필요
