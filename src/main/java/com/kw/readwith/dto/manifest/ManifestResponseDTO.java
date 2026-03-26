@@ -23,6 +23,11 @@ public class ManifestResponseDTO {
      * 인물 목록
      */
     private List<CharacterManifestDTO> characters;
+
+    /**
+     * 리더가 직접 참조하는 정규화 산출물
+     */
+    private ReaderArtifactsDTO readerArtifacts;
     
     /**
      * Progress API 메타데이터

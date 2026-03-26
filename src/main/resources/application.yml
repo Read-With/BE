@@ -20,7 +20,7 @@ spring:
     init:
       mode: never
   flyway:
-    enabled: false
+    enabled: ${FLYWAY_ENABLED:false}
   jpa:
     open-in-view: false # 요청 전/후로 EntityManager를 물고 있지 않도록
     properties:
@@ -70,7 +70,15 @@ spring:
 
 epub:
   normalization:
-    enabled: ${EPUB_NORMALIZATION_ENABLED:false}
+    enabled: ${EPUB_NORMALIZATION_ENABLED:true}
+    rule-version: ${EPUB_NORMALIZATION_RULE_VERSION:v1}
+    locator-version: ${EPUB_NORMALIZATION_LOCATOR_VERSION:v2}
+
+artifact:
+  storage:
+    public-prefix: ${ARTIFACT_PUBLIC_PREFIX:public}
+    private-prefix: ${ARTIFACT_PRIVATE_PREFIX:private}
+    cloud-front-base-url: ${CLOUDFRONT_BASE_URL:}
 
 locator:
   mode: ${LOCATOR_MODE:on}

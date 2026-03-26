@@ -45,6 +45,18 @@ public class AsyncConfig implements AsyncConfigurer {
         
         return executor;
     }
+
+    @Bean(name = "normalizationJobExecutor")
+    public Executor normalizationJobExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("normalization-job-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
     
     @Override
     public Executor getAsyncExecutor() {

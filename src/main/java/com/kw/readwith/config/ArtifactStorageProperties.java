@@ -6,12 +6,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "epub.normalization")
+@ConfigurationProperties(prefix = "artifact.storage")
 @Getter
 @Setter
-public class EpubNormalizationProperties {
+public class ArtifactStorageProperties {
 
-    private boolean enabled = false;
-    private String ruleVersion = "v1";
-    private String locatorVersion = "v2";
+    private String publicPrefix = "public";
+    private String privatePrefix = "private";
+    private String cloudFrontBaseUrl = "";
 }

@@ -1,28 +1,30 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
-import com.kw.readwith.aws.s3.AmazonS3Manager;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.User;
+import com.kw.readwith.domain.enums.NormalizationStatus;
+import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.FavoriteRepository;
 import com.kw.readwith.repository.UserRepository;
-import lombok.Getter;
+import com.kw.readwith.service.normalization.EpubMetadataExtractorService;
+import com.kw.readwith.service.normalization.ExtractedEpubMetadata;
+import com.kw.readwith.service.normalization.NormalizationJobDispatcher;
+import com.kw.readwith.service.normalization.NormalizationJobService;
+import com.kw.readwith.service.normalization.NormalizedArtifactStorageService;
+import com.kw.readwith.service.normalization.NormalizationVersionService;
 import lombok.RequiredArgsConstructor;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,27 +36,21 @@ public class BookService {
     private final BookRepository bookRepository;
     private final FavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
-    private final AmazonS3Manager amazonS3Manager;
+    private final EpubMetadataExtractorService epubMetadataExtractorService;
+    private final NormalizedArtifactStorageService normalizedArtifactStorageService;
+    private final NormalizationJobService normalizationJobService;
+    private final NormalizationJobDispatcher normalizationJobDispatcher;
+    private final NormalizationVersionService normalizationVersionService;
 
-    /**
-     * 도서 목록 조회 (검색/필터/정렬/즐겨찾기)
-     * 접근 가능한 도서: summary = true AND (isDefault = true OR uploadedBy.id = userId)
-     */
     public List<BookSummaryDTO> getBooks(String keyword,
                                          String language,
                                          Boolean favoriteOnly,
                                          String sortBy,
                                          Long userId) {
-        List<Book> books;
-        if (userId == null) {
-            // 비로그인 사용자: 기본 제공 + 요약 완료만
-            books = bookRepository.findBySummaryTrueAndIsDefaultTrue();
-        } else {
-            // 로그인 사용자: 기본 제공 + 본인 업로드 + 요약 완료만
-            books = bookRepository.findAccessibleBooks(userId);
-        }
+        List<Book> books = userId == null
+                ? bookRepository.findByNormalizationStatusAndIsDefaultTrue(NormalizationStatus.READY)
+                : bookRepository.findAccessibleBooks(userId, NormalizationStatus.READY);
 
-        // 검색
         if (keyword != null && !keyword.isBlank()) {
             String lower = keyword.toLowerCase();
             books = books.stream()
@@ -62,35 +58,28 @@ public class BookService {
                     .collect(Collectors.toList());
         }
 
-        // 언어 필터
         if (language != null && !language.isBlank()) {
             books = books.stream()
                     .filter(b -> language.equalsIgnoreCase(b.getLanguage()))
                     .collect(Collectors.toList());
         }
 
-        // 즐겨찾기 필터
-        final Set<Long> favoriteBookIds;
-        if (userId != null) {
-            favoriteBookIds = favoriteRepository.findByUserId(userId).stream()
-                    .map(fav -> fav.getBook().getId())
-                    .collect(Collectors.toSet());
-        } else {
-            favoriteBookIds = Set.of();
-        }
+        final Set<Long> favoriteBookIds = userId == null
+                ? Set.of()
+                : favoriteRepository.findByUserId(userId).stream()
+                .map(fav -> fav.getBook().getId())
+                .collect(Collectors.toSet());
 
-        if (favoriteOnly != null && favoriteOnly) {
+        if (Boolean.TRUE.equals(favoriteOnly)) {
             books = books.stream()
                     .filter(b -> favoriteBookIds.contains(b.getId()))
                     .collect(Collectors.toList());
         }
 
-        // 정렬 (updatedAt, title)
         books.sort((a, b) -> {
             if ("title".equalsIgnoreCase(sortBy)) {
                 return a.getTitle().compareToIgnoreCase(b.getTitle());
             }
-            // default updatedAt desc
             return b.getUpdatedAt().compareTo(a.getUpdatedAt());
         });
 
@@ -101,73 +90,79 @@ public class BookService {
                         .author(book.getAuthor())
                         .coverImgUrl(book.getCoverImgUrl())
                         .epubPath(book.getEpubPath())
-                        .normalizationStatus(book.getNormalizationStatus())
+                        .normalizationStatus(enumName(book.getNormalizationStatus()))
+                        .analysisStatus(enumName(book.getAnalysisStatus()))
                         .ruleVersion(book.getRuleVersion())
                         .locatorVersion(book.getLocatorVersion())
+                        .normalizationRunId(book.getNormalizationRunId())
+                        .normalizationVersionStatus(normalizationVersionService.resolveStatus(book).name())
+                        .needsRenormalization(normalizationVersionService.needsRenormalization(book))
                         .normalizedArtifactPath(book.getNormalizedArtifactPath())
                         .isDefault(book.isDefault())
                         .isFavorite(favoriteBookIds.contains(book.getId()))
                         .summary(book.isSummary())
                         .updatedAt(book.getUpdatedAt())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
     }
 
-    /**
-     * 단일 도서 조회
-     * 접근 가능한 도서: summary = true AND (isDefault = true OR uploadedBy.id = userId)
-     */
     public BookDetailDTO getBook(Long bookId, Long userId) {
-        Book book;
-        if (userId == null) {
-            // 비로그인 사용자: 기본 제공 + 요약 완료만
-            book = bookRepository.findByIdAndSummaryTrueAndIsDefaultTrue(bookId)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-        } else {
-            // 로그인 사용자: 기본 제공 + 본인 업로드 + 요약 완료만
-            book = bookRepository.findAccessibleBook(bookId, userId)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-        }
+        Book book = userId == null
+                ? bookRepository.findByIdAndNormalizationStatusAndIsDefaultTrue(bookId, NormalizationStatus.READY)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND))
+                : bookRepository.findAccessibleBook(bookId, userId, NormalizationStatus.READY)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
-        boolean isFavorite = false;
-        if (userId != null) {
-            isFavorite = favoriteRepository.findByUserId(userId).stream()
-                    .anyMatch(fav -> fav.getBook().getId().equals(bookId));
-        }
+        boolean isFavorite = userId != null && favoriteRepository.findByUserId(userId).stream()
+                .anyMatch(fav -> fav.getBook().getId().equals(bookId));
+
         return convertToDetailDTO(book, isFavorite);
     }
 
-    /**
-     * 도서 업로드 (EPUB 파일 S3 업로드 후 Book 레코드 저장)
-     */
     @Transactional
     public BookDetailDTO uploadBook(Long userId,
                                     MultipartFile epubFile,
                                     String title,
                                     String author,
                                     String language) {
-        if(epubFile == null || epubFile.isEmpty()){
+        if (epubFile == null || epubFile.isEmpty()) {
             throw new GeneralException(ErrorStatus._BAD_REQUEST);
         }
-        // 업로더 유저 조회
+
         User uploader = userRepository.findById(userId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
-        // S3 original 폴더에 EPUB 업로드
-        String epubUrl = amazonS3Manager.uploadOriginal(title, epubFile);
+
+        ExtractedEpubMetadata extractedMetadata = epubMetadataExtractorService.extract(epubFile);
+        String resolvedTitle = resolveRequiredMetadata("title", extractedMetadata.title(), title);
+        String resolvedAuthor = resolveRequiredMetadata("author", extractedMetadata.author(), author);
+        String resolvedLanguage = resolveRequiredMetadata("language", extractedMetadata.language(), language);
 
         Book book = Book.builder()
-                .title(title)
-                .author(author)
-                .language(language)
+                .title(resolvedTitle)
+                .author(resolvedAuthor)
+                .language(resolvedLanguage)
                 .isDefault(false)
                 .coverImgUrl(null)
-                .epubPath(epubUrl)
                 .uploadedBy(uploader)
                 .summary(false)
                 .build();
 
-        Book saved = bookRepository.save(book);
-        return convertToDetailDTO(saved, false);
+        Book savedBook = bookRepository.save(book);
+        String sourceVersion = normalizedArtifactStorageService.newSourceVersion();
+        String sourcePath = normalizedArtifactStorageService.storeSourceEpub(savedBook.getId(), sourceVersion, epubFile);
+        savedBook.assignUploadedSource(sourcePath);
+        savedBook.markNormalizationQueued();
+        savedBook.resetAnalysisStatus();
+
+        ProcessingJob job = normalizationJobService.createQueuedJob(savedBook, sourceVersion, "UPLOAD");
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                normalizationJobDispatcher.dispatch(job.getId());
+            }
+        });
+
+        return convertToDetailDTO(savedBook, false);
     }
 
     private BookDetailDTO convertToDetailDTO(Book book, boolean isFavorite) {
@@ -179,12 +174,39 @@ public class BookService {
                 .isDefault(book.isDefault())
                 .coverImgUrl(book.getCoverImgUrl())
                 .epubPath(book.getEpubPath())
-                .normalizationStatus(book.getNormalizationStatus())
+                .normalizationStatus(enumName(book.getNormalizationStatus()))
+                .analysisStatus(enumName(book.getAnalysisStatus()))
                 .ruleVersion(book.getRuleVersion())
                 .locatorVersion(book.getLocatorVersion())
+                .normalizationRunId(book.getNormalizationRunId())
+                .normalizationVersionStatus(normalizationVersionService.resolveStatus(book).name())
+                .needsRenormalization(normalizationVersionService.needsRenormalization(book))
                 .normalizedArtifactPath(book.getNormalizedArtifactPath())
                 .isFavorite(isFavorite)
                 .summary(book.isSummary())
                 .build();
+    }
+
+    private String enumName(Enum<?> value) {
+        return value == null ? null : value.name();
+    }
+
+    private String resolveRequiredMetadata(String fieldName, String extractedValue, String fallbackValue) {
+        String resolved = normalizeMetadataValue(extractedValue);
+        if (resolved == null) {
+            resolved = normalizeMetadataValue(fallbackValue);
+        }
+        if (resolved == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Missing book " + fieldName + ".");
+        }
+        return resolved;
+    }
+
+    private String normalizeMetadataValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.isBlank() ? null : normalized;
     }
 }

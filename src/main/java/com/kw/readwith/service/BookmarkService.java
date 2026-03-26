@@ -7,10 +7,10 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Bookmark;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.User;
-import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.dto.bookmark.BookmarkResponseDTO;
 import com.kw.readwith.dto.bookmark.CreateBookmarkRequestDTO;
 import com.kw.readwith.dto.bookmark.UpdateBookmarkRequestDTO;
+import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.BookmarkRepository;
 import com.kw.readwith.repository.ChapterRepository;
@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,36 +33,26 @@ public class BookmarkService {
     private final ChapterRepository chapterRepository;
     private final LocatorSupport locatorSupport;
     private final V2TransitionGuard transitionGuard;
+    private final BookAccessPolicy bookAccessPolicy;
 
-    /**
-     * 북마크 목록 조회
-     */
     public List<BookmarkResponseDTO> getBookmarks(Long userId, Long bookId, String sort) {
-        // 사용자와 책 존재 여부 확인
         validateUserExists(userId);
-        validateBookAccess(userId, bookId);
+        validateReadableBook(userId, bookId);
 
-        List<Bookmark> bookmarks;
-        if ("time_asc".equalsIgnoreCase(sort)) {
-            bookmarks = bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtAsc(userId, bookId);
-        } else {
-            // 기본값: time_desc (최신순)
-            bookmarks = bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtDesc(userId, bookId);
-        }
+        List<Bookmark> bookmarks = "time_asc".equalsIgnoreCase(sort)
+                ? bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtAsc(userId, bookId)
+                : bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtDesc(userId, bookId);
 
         return bookmarks.stream()
                 .map(this::convertToResponseDTO)
-                .collect(Collectors.toList());
+                .toList();
     }
 
-    /**
-     * 북마크 생성
-     */
     @Transactional
     public BookmarkResponseDTO createBookmark(Long userId, CreateBookmarkRequestDTO requestDTO) {
-        // 사용자와 책 존재 여부 확인
         User user = validateUserExists(userId);
-        Book book = validateBookAccess(userId, requestDTO.getBookId());
+        Book book = validateReadableBook(userId, requestDTO.getBookId());
+
         transitionGuard.ensureLocatorWritesEnabled("bookmark 생성");
         ResolvedBookmarkRange resolvedRange = resolveRange(book, requestDTO.getStartLocator(), requestDTO.getEndLocator());
 
@@ -72,7 +61,6 @@ public class BookmarkService {
             throw new GeneralException(ErrorStatus.BOOKMARK_ALREADY_EXISTS);
         }
 
-        // 북마크 생성
         Bookmark bookmark = Bookmark.builder()
                 .user(user)
                 .book(book)
@@ -85,64 +73,34 @@ public class BookmarkService {
                 .memo(requestDTO.getMemo())
                 .build();
 
-        Bookmark savedBookmark = bookmarkRepository.save(bookmark);
-        return convertToResponseDTO(savedBookmark);
+        return convertToResponseDTO(bookmarkRepository.save(bookmark));
     }
 
-    /**
-     * 북마크 수정
-     */
     @Transactional
     public BookmarkResponseDTO updateBookmark(Long userId, Long bookmarkId, UpdateBookmarkRequestDTO requestDTO) {
-        // 북마크 존재 및 권한 확인
         Bookmark bookmark = validateBookmarkOwnership(userId, bookmarkId);
-
-        // 북마크 업데이트
         bookmark.updateBookmark(requestDTO.getColor(), requestDTO.getMemo());
-
         return convertToResponseDTO(bookmark);
     }
 
-    /**
-     * 북마크 삭제
-     */
     @Transactional
     public void deleteBookmark(Long userId, Long bookmarkId) {
-        // 북마크 존재 및 권한 확인
         Bookmark bookmark = validateBookmarkOwnership(userId, bookmarkId);
-
         bookmarkRepository.delete(bookmark);
     }
 
-    /**
-     * 사용자 존재 여부 확인
-     */
     private User validateUserExists(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
     }
 
-    /**
-     * 책 존재 및 접근 권한 확인
-     */
-    private Book validateBookAccess(Long userId, Long bookId) {
+    private Book validateReadableBook(Long userId, Long bookId) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
-
-        // 접근 권한 확인: 기본 제공 도서 또는 본인이 업로드한 도서
-        boolean hasAccess = book.isDefault() || 
-                           (book.getUploadedBy() != null && book.getUploadedBy().getId().equals(userId));
-        
-        if (!hasAccess) {
-            throw new GeneralException(ErrorStatus.BOOK_ACCESS_DENIED);
-        }
-
+        bookAccessPolicy.ensureReadable(book, userId);
         return book;
     }
 
-    /**
-     * 북마크 소유권 확인
-     */
     private Bookmark validateBookmarkOwnership(Long userId, Long bookmarkId) {
         return bookmarkRepository.findByIdAndUserId(bookmarkId, userId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOKMARK_NOT_FOUND));
@@ -181,9 +139,8 @@ public class BookmarkService {
         if (endLocator.getChapterIndex() == null) {
             throw new GeneralException(ErrorStatus._BAD_REQUEST, "endLocator.chapterIndex는 필수입니다.");
         }
-
         if (!startLocator.getChapterIndex().equals(endLocator.getChapterIndex())) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "북마크 범위는 동일 챕터 내에서만 저장할 수 있습니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "범위 북마크는 동일 챕터 내에서만 생성할 수 있습니다.");
         }
 
         Chapter endChapter = chapterRepository.findByBookIdAndIdx(book.getId(), endLocator.getChapterIndex())
@@ -221,10 +178,7 @@ public class BookmarkService {
     }
 
     private boolean equalsNullable(Integer left, Integer right) {
-        if (left == null) {
-            return right == null;
-        }
-        return left.equals(right);
+        return left == null ? right == null : left.equals(right);
     }
 
     private record ResolvedBookmarkRange(Integer startTxtOffset, Integer endTxtOffset) {

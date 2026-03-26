@@ -97,4 +97,29 @@ public class Chapter extends BaseEntity {
     public void markPovSummariesAsUncached() {
         this.povSummariesCached = false;
     }
+
+    public void applyNormalizationProjection(
+            String title,
+            String spineHref,
+            Integer paragraphCount,
+            String paragraphStartsJson,
+            String paragraphLengthsJson,
+            Integer totalCodePoints,
+            int startPos,
+            int endPos,
+            String rawText
+    ) {
+        this.title = title;
+        this.spineHref = spineHref;
+        this.paragraphCount = paragraphCount;
+        this.paragraphStartsJson = paragraphStartsJson;
+        this.paragraphLengthsJson = paragraphLengthsJson;
+        this.totalCodePoints = totalCodePoints;
+        this.startPos = startPos;
+        this.endPos = endPos;
+        this.rawText = rawText;
+        this.povSummariesCached = false;
+        this.summaryText = null;
+        this.summaryUploadUrl = null;
+    }
 }

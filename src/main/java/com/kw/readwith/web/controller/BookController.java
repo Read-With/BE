@@ -60,9 +60,9 @@ public class BookController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "도서 업로드", description = "EPUB 파일을 업로드하여 도서를 등록합니다.")
     public ApiResponse<BookDetailDTO> uploadBook(@RequestPart("file") MultipartFile file,
-                                                    @RequestPart("title") String title,
-                                                    @RequestPart("author") String author,
-                                                    @RequestPart("language") String language) {
+                                                    @RequestPart(value = "title", required = false) String title,
+                                                    @RequestPart(value = "author", required = false) String author,
+                                                    @RequestPart(value = "language", required = false) String language) {
         Long userId = getCurrentUserId();
         BookDetailDTO response = bookService.uploadBook(userId, file, title, author, language);
         return ApiResponse.onSuccess(response);

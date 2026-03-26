@@ -6,69 +6,39 @@ import lombok.Getter;
 @Getter
 @Builder
 public class BookManifestDTO {
-    
-    /**
-     * 책 ID
-     */
+
+    /** 책 식별자 */
     private Long id;
-    
-    /**
-     * 제목
-     */
+    /** 리더에 표시할 제목 */
     private String title;
-    
-    /**
-     * 저자
-     */
+    /** 리더에 표시할 저자 */
     private String author;
-    
-    /**
-     * 언어 (ISO-639 코드)
-     */
+    /** 책 언어 코드 */
     private String language;
-    
-    /**
-     * 기본 제공 책 여부
-     */
+    /** 기본 제공 책인지 여부 */
     private Boolean isDefault;
-    
-    /**
-     * 요약 완료 여부
-     */
+    /** 요약 자료 준비 여부 */
     private Boolean summary;
-    
-    /**
-     * 커버 이미지 URL
-     */
+    /** 리더용 커버 이미지 */
     private String coverImgUrl;
-    
-    /**
-     * 요약 파일 URL
-     */
+    /** 책 전체 요약 경로 */
     private String summaryUrl;
-    
-    /**
-     * EPUB 파일 경로
-     */
+    /** 원본 EPUB 경로 */
     private String epubPath;
-
-    /**
-     * 정규화 상태
-     */
+    /** 본문 읽기 가능 상태 */
     private String normalizationStatus;
-
-    /**
-     * 정규화 규칙 버전
-     */
+    /** AI 분석 자료 상태 */
+    private String analysisStatus;
+    /** 현재 활성 정규화 규칙 버전 */
     private String ruleVersion;
-
-    /**
-     * locator 버전
-     */
+    /** 현재 활성 locator 버전 */
     private String locatorVersion;
-
-    /**
-     * 정규화 산출물 경로
-     */
+    /** 현재 활성 정규화 run id */
+    private String normalizationRunId;
+    /** 현재 엔진 기준 버전 상태 */
+    private String normalizationVersionStatus;
+    /** 재정규화 필요 여부 */
+    private Boolean needsRenormalization;
+    /** 활성 정규화 산출물 루트 경로 */
     private String normalizedArtifactPath;
 }
