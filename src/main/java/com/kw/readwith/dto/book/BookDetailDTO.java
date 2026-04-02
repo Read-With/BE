@@ -1,43 +1,62 @@
 package com.kw.readwith.dto.book;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
 @Getter
 @Builder
+@Schema(description = "도서 상세 응답")
 public class BookDetailDTO {
-    /** 책 식별자 */
+
+    @Schema(description = "도서 ID", example = "42")
     private Long id;
-    /** 책 상세 제목 */
+
+    @Schema(description = "도서 제목")
     private String title;
-    /** 책 상세 저자 */
+
+    @Schema(description = "저자명")
     private String author;
-    /** 책 언어 코드 */
+
+    @Schema(description = "언어 코드", example = "en")
     private String language;
-    /** 기본 제공 책인지 여부 */
+
+    @Schema(description = "기본 제공 도서 여부")
     private boolean isDefault;
-    /** 책 상세 커버 이미지 */
+
+    @Schema(description = "표지 이미지 URL", nullable = true)
     private String coverImgUrl;
-    /** 원본 EPUB 경로 */
+
+    @Schema(description = "원본 EPUB 저장 경로", nullable = true)
     private String epubPath;
-    /** 본문 읽기 가능 상태 */
+
+    @Schema(description = "정규화 상태", example = "QUEUED")
     private String normalizationStatus;
-    /** AI 분석 자료 상태 */
+
+    @Schema(description = "분석 상태", example = "NONE")
     private String analysisStatus;
-    /** 현재 활성 정규화 규칙 버전 */
+
+    @Schema(description = "정규화 규칙 버전", nullable = true)
     private String ruleVersion;
-    /** 현재 활성 locator 버전 */
+
+    @Schema(description = "locator 버전", nullable = true)
     private String locatorVersion;
-    /** 현재 활성 정규화 run id */
+
+    @Schema(description = "활성 정규화 run id", nullable = true)
     private String normalizationRunId;
-    /** 현재 엔진 기준 버전 상태 */
+
+    @Schema(description = "정규화 버전 비교 상태", nullable = true)
     private String normalizationVersionStatus;
-    /** 재정규화가 필요한 책인지 표시 */
+
+    @Schema(description = "재정규화 필요 여부")
     private boolean needsRenormalization;
-    /** 활성 정규화 산출물 루트 경로 */
+
+    @Schema(description = "정규화 산출물 루트 경로", nullable = true)
     private String normalizedArtifactPath;
-    /** 현재 사용자의 즐겨찾기 여부 */
+
+    @Schema(description = "현재 사용자 기준 즐겨찾기 여부")
     private boolean isFavorite;
-    /** 요약 자료 준비 여부 */
+
+    @Schema(description = "요약 준비 완료 여부")
     private boolean summary;
 }

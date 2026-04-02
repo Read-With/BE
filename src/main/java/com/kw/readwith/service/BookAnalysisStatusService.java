@@ -5,6 +5,7 @@ import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import com.kw.readwith.repository.EventCharacterStatRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import com.kw.readwith.repository.EventRepository;
@@ -22,6 +23,7 @@ public class BookAnalysisStatusService {
     private final BookRepository bookRepository;
     private final ChapterRepository chapterRepository;
     private final CharacterRepository characterRepository;
+    private final CharacterPovSummaryRepository characterPovSummaryRepository;
     private final EventRepository eventRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final EventCharacterStatRepository eventCharacterStatRepository;
@@ -70,7 +72,8 @@ public class BookAnalysisStatusService {
         if (chapters.isEmpty()) {
             return false;
         }
-        if (chapters.stream().anyMatch(chapter -> !chapter.isPovSummariesCached())) {
+        if (chapters.stream().anyMatch(chapter -> !chapter.isPovSummariesCached()
+                || !characterPovSummaryRepository.existsByChapter(chapter))) {
             return false;
         }
 

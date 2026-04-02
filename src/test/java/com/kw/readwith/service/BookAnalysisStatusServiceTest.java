@@ -7,6 +7,7 @@ import com.kw.readwith.domain.enums.NormalizationStatus;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import com.kw.readwith.repository.EventCharacterStatRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import com.kw.readwith.repository.EventRepository;
@@ -36,6 +37,9 @@ class BookAnalysisStatusServiceTest {
     private CharacterRepository characterRepository;
 
     @Mock
+    private CharacterPovSummaryRepository characterPovSummaryRepository;
+
+    @Mock
     private EventRepository eventRepository;
 
     @Mock
@@ -59,10 +63,11 @@ class BookAnalysisStatusServiceTest {
         when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
         when(characterRepository.existsByBook(book)).thenReturn(true);
         when(eventRepository.existsByBook(book)).thenReturn(true);
-        when(chapterRepository.findByBookId(1L)).thenReturn(List.of(
-                Chapter.builder().idx(1).povSummariesCached(true).build(),
-                Chapter.builder().idx(2).povSummariesCached(true).build()
-        ));
+        Chapter chapter1 = Chapter.builder().idx(1).povSummariesCached(true).build();
+        Chapter chapter2 = Chapter.builder().idx(2).povSummariesCached(true).build();
+        when(chapterRepository.findByBookId(1L)).thenReturn(List.of(chapter1, chapter2));
+        when(characterPovSummaryRepository.existsByChapter(chapter1)).thenReturn(true);
+        when(characterPovSummaryRepository.existsByChapter(chapter2)).thenReturn(true);
         when(eventRelationshipEdgeRepository.existsByBook(book)).thenReturn(false);
         when(eventCharacterStatRepository.existsByBook(book)).thenReturn(true);
 
@@ -85,10 +90,10 @@ class BookAnalysisStatusServiceTest {
         when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
         when(characterRepository.existsByBook(book)).thenReturn(true);
         when(eventRepository.existsByBook(book)).thenReturn(true);
-        when(chapterRepository.findByBookId(1L)).thenReturn(List.of(
-                Chapter.builder().idx(1).povSummariesCached(true).build(),
-                Chapter.builder().idx(2).povSummariesCached(false).build()
-        ));
+        Chapter chapter1 = Chapter.builder().idx(1).povSummariesCached(true).build();
+        Chapter chapter2 = Chapter.builder().idx(2).povSummariesCached(false).build();
+        when(chapterRepository.findByBookId(1L)).thenReturn(List.of(chapter1, chapter2));
+        when(characterPovSummaryRepository.existsByChapter(chapter1)).thenReturn(true);
 
         bookAnalysisStatusService.refreshStatus(1L);
 
@@ -127,5 +132,30 @@ class BookAnalysisStatusServiceTest {
 
         assertThat(book.getAnalysisStatus()).isEqualTo(AnalysisStatus.READY);
         assertThat(book.isSummary()).isTrue();
+    }
+
+    @Test
+    @DisplayName("chapter 요약 플래그가 올라가 있어도 실제 summary row가 없으면 READY로 올리지 않는다")
+    void refreshStatusResetsToNoneWhenSummaryRowsAreMissing() {
+        Book book = Book.builder()
+                .id(1L)
+                .normalizationStatus(NormalizationStatus.READY)
+                .analysisStatus(AnalysisStatus.NONE)
+                .build();
+        Chapter chapter = Chapter.builder()
+                .idx(1)
+                .povSummariesCached(true)
+                .build();
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+        when(characterRepository.existsByBook(book)).thenReturn(true);
+        when(eventRepository.existsByBook(book)).thenReturn(true);
+        when(chapterRepository.findByBookId(1L)).thenReturn(List.of(chapter));
+        when(characterPovSummaryRepository.existsByChapter(chapter)).thenReturn(false);
+
+        bookAnalysisStatusService.refreshStatus(1L);
+
+        assertThat(book.getAnalysisStatus()).isEqualTo(AnalysisStatus.NONE);
+        assertThat(book.isSummary()).isFalse();
     }
 }

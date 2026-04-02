@@ -56,7 +56,7 @@ public class CharacterPovSummaryService {
                 .map(summary -> new CharacterPovSummaryDTO(
                         summary.getId(),
                         summary.getChapter().getId(),
-                        summary.getCharacter().getId(),
+                        summary.getCharacter().getCharacterId(),
                         summary.getSummaryText()))
                 .toList();
     }
@@ -75,7 +75,7 @@ public class CharacterPovSummaryService {
 
         List<ChapterPovSummaryDTO> povSummaryDTOs = characterPovSummaryRepository.findByBookIdAndChapterIdx(bookId, chapterIdx).stream()
                 .map(summary -> new ChapterPovSummaryDTO(
-                        summary.getCharacter().getId(),
+                        summary.getCharacter().getCharacterId(),
                         summary.getCharacter().getName(),
                         summary.getSummaryText(),
                         summary.getCharacter().isMainCharacter()

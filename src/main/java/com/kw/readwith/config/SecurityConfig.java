@@ -59,7 +59,8 @@ public class SecurityConfig {
                                 "/api/v2/progress/**",
                                 "/api/bookmarks/**",
                                 "/api/v2/bookmarks/**",
-                                "/api/favorites/**"
+                                "/api/favorites/**",
+                                "/api/v2/favorites/**"
                         ).authenticated()
                         .anyRequest().authenticated()
                 )

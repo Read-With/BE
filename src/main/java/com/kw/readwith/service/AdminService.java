@@ -332,13 +332,12 @@ public class AdminService {
                     throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED, "Chapter summary already exists: " + chapterIdx);
                 }
 
-                if (uploadDTO.getItems() != null) {
-                    List<CharacterPovSummary> newSummariesFromFile = uploadDTO.getItems().stream()
-                            .map(this::validateSummaryItem)
-                            .map(item -> buildCharacterPovSummary(chapter, item))
-                            .collect(Collectors.toList());
-                    allNewSummaries.addAll(newSummariesFromFile);
-                }
+                List<SummaryItemDTO> summaryItems = requireSummaryItems(uploadDTO);
+                List<CharacterPovSummary> newSummariesFromFile = summaryItems.stream()
+                        .map(this::validateSummaryItem)
+                        .map(item -> buildCharacterPovSummary(chapter, item))
+                        .collect(Collectors.toList());
+                allNewSummaries.addAll(newSummariesFromFile);
 
                 chapter.markAsSummarized();
             }
@@ -435,6 +434,13 @@ public class AdminService {
         requireText(item.getCharacterId(), "summary.characterId");
         requireText(item.getSummary(), "summary.summary");
         return item;
+    }
+
+    private List<SummaryItemDTO> requireSummaryItems(SummaryUploadDTO uploadDTO) {
+        if (uploadDTO.getItems() == null || uploadDTO.getItems().isEmpty()) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "summary.items must contain at least one item.");
+        }
+        return uploadDTO.getItems();
     }
 
     private CharacterPovSummary buildCharacterPovSummary(Chapter chapter, SummaryItemDTO item) {
