@@ -39,9 +39,11 @@ public class BookmarkService {
         validateUserExists(userId);
         validateReadableBook(userId, bookId);
 
-        List<Bookmark> bookmarks = "time_asc".equalsIgnoreCase(sort)
-                ? bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtAsc(userId, bookId)
-                : bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtDesc(userId, bookId);
+        List<Bookmark> bookmarks = switch (normalizeSort(sort)) {
+            case "time_asc" -> bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtAsc(userId, bookId);
+            case "time_desc" -> bookmarkRepository.findByUserIdAndBookIdOrderByCreatedAtDesc(userId, bookId);
+            default -> throw new GeneralException(ErrorStatus._BAD_REQUEST, "sort must be time_desc or time_asc.");
+        };
 
         return bookmarks.stream()
                 .map(this::convertToResponseDTO)
@@ -179,6 +181,13 @@ public class BookmarkService {
 
     private boolean equalsNullable(Integer left, Integer right) {
         return left == null ? right == null : left.equals(right);
+    }
+
+    private String normalizeSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return "time_desc";
+        }
+        return sort.trim().toLowerCase();
     }
 
     private record ResolvedBookmarkRange(Integer startTxtOffset, Integer endTxtOffset) {
