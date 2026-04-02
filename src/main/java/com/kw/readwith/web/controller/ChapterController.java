@@ -14,7 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/books")
+@RequestMapping({"/api/books", "/api/v2/books"})
 @RequiredArgsConstructor
 @Tag(name = "Chapter", description = "챕터 관련 API")
 public class ChapterController {

@@ -15,7 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
-@RequestMapping("/api/favorites")
+@RequestMapping({"/api/favorites", "/api/v2/favorites"})
 @RequiredArgsConstructor
 @Tag(name = "Favorites", description = "즐겨찾기 관련 API")
 public class FavoriteController {
