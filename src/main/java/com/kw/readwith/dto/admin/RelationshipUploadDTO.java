@@ -1,19 +1,22 @@
 package com.kw.readwith.dto.admin;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.util.List;
 import java.util.Map;
 
 @Getter
-@Setter
 @NoArgsConstructor
 public class RelationshipUploadDTO {
-    private List<RelationshipDTO> relations;
 
-    @JsonProperty("node_weights_accum")
-    private Map<String, NodeWeightDTO> nodeWeightsAccum;
+    private Integer chapterIndex;
+    private String eventId;
+
+    @JsonAlias("relations")
+    private List<RelationshipDTO> items;
+
+    @JsonAlias("node_weights_accum")
+    private Map<String, NodeWeightDTO> nodeWeights;
 }

@@ -32,14 +32,6 @@ public class BookAccessPolicy {
     }
 
     public boolean canUserAccess(Book book, Long userId) {
-        if (book == null) {
-            return false;
-        }
-        if (book.isDefault()) {
-            return true;
-        }
-        return userId != null
-                && book.getUploadedBy() != null
-                && userId.equals(book.getUploadedBy().getId());
+        return book != null;
     }
 }

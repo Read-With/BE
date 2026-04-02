@@ -1,5 +1,6 @@
 package com.kw.readwith.dto.admin;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -8,9 +9,18 @@ import java.util.List;
 @Getter
 @NoArgsConstructor
 public class RelationshipDTO {
-    private Long id1;
-    private Long id2;
-    private List<String> relation;
+
+    @JsonAlias("id1")
+    private String fromCharacterId;
+
+    @JsonAlias("id2")
+    private String toCharacterId;
+
+    @JsonAlias("relation")
+    private List<String> labels;
+
     private Double positivity;
-    private Integer count;
+
+    @JsonAlias("count")
+    private Integer evidenceCount;
 }

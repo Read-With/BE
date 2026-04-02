@@ -25,10 +25,24 @@ public class BookController {
 
     private final BookService bookService;
 
-    private Long getCurrentUserId() {
+    private Long getCurrentUserIdOrNull() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof Long) {
-            return (Long) authentication.getPrincipal();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return null;
+        }
+        if (authentication.getPrincipal() instanceof Long principal) {
+            return principal;
+        }
+        if ("anonymousUser".equals(authentication.getPrincipal())) {
+            return null;
+        }
+        throw new GeneralException(ErrorStatus._UNAUTHORIZED);
+    }
+
+    private Long requireCurrentUserId() {
+        Long userId = getCurrentUserIdOrNull();
+        if (userId != null) {
+            return userId;
         }
         throw new GeneralException(ErrorStatus._UNAUTHORIZED);
     }
@@ -42,7 +56,7 @@ public class BookController {
             @RequestParam(defaultValue = "updatedAt") String sort,
             @RequestParam(required = false) Boolean favorite
     ) {
-        Long userId = getCurrentUserId();
+        Long userId = getCurrentUserIdOrNull();
         List<BookSummaryDTO> response = bookService.getBooks(q, language, favorite, sort, userId);
         return ApiResponse.onSuccess(response);
     }
@@ -51,7 +65,7 @@ public class BookController {
     @GetMapping("/{bookId}")
     @Operation(summary = "단일 도서 조회", description = "도서 ID로 단일 도서를 조회합니다.")
     public ApiResponse<BookDetailDTO> getBook(@PathVariable Long bookId) {
-        Long userId = getCurrentUserId();
+        Long userId = getCurrentUserIdOrNull();
         BookDetailDTO response = bookService.getBook(bookId, userId);
         return ApiResponse.onSuccess(response);
     }
@@ -63,7 +77,7 @@ public class BookController {
                                                     @RequestPart(value = "title", required = false) String title,
                                                     @RequestPart(value = "author", required = false) String author,
                                                     @RequestPart(value = "language", required = false) String language) {
-        Long userId = getCurrentUserId();
+        Long userId = requireCurrentUserId();
         BookDetailDTO response = bookService.uploadBook(userId, file, title, author, language);
         return ApiResponse.onSuccess(response);
     }

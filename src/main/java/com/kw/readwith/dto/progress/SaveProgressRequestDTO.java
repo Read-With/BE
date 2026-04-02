@@ -1,8 +1,12 @@
 package com.kw.readwith.dto.progress;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.kw.readwith.dto.common.LocatorDTO;
 import jakarta.validation.constraints.NotNull;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 @Builder
@@ -10,10 +14,14 @@ import lombok.*;
 @AllArgsConstructor
 public class SaveProgressRequestDTO {
 
-    @NotNull(message = "책 ID는 필수입니다.")
+    @NotNull(message = "bookId is required.")
     private Long bookId;
 
-    @NotNull(message = "locator는 필수입니다.")
-    private LocatorDTO locator;
+    @JsonAlias("locator")
+    @NotNull(message = "startLocator is required.")
+    private LocatorDTO startLocator;
 
+    public LocatorDTO getLocator() {
+        return startLocator;
+    }
 }

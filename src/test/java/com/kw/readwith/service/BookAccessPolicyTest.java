@@ -42,8 +42,8 @@ class BookAccessPolicyTest {
     }
 
     @Test
-    @DisplayName("비공개 업로드 책은 업로더만 접근할 수 있다")
-    void privateUploadedBookOnlyOwnerCanAccess() {
+    @DisplayName("정규화 완료된 업로드 책은 다른 사용자도 읽을 수 있다")
+    void uploadedBookIsGloballyReadableWhenReady() {
         User owner = User.builder().id(7L).build();
         Book book = Book.builder()
                 .id(1L)
@@ -54,6 +54,7 @@ class BookAccessPolicyTest {
 
         assertThatCode(() -> bookAccessPolicy.ensureReadable(book, 7L))
                 .doesNotThrowAnyException();
-        assertThrows(GeneralException.class, () -> bookAccessPolicy.ensureReadable(book, 8L));
+        assertThatCode(() -> bookAccessPolicy.ensureReadable(book, 8L))
+                .doesNotThrowAnyException();
     }
 }

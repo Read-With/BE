@@ -76,10 +76,7 @@ public class ManifestService {
     }
 
     private Book validateAndGetBook(Long bookId, Long userId) {
-        return userId == null
-                ? bookRepository.findByIdAndNormalizationStatusAndIsDefaultTrue(bookId, NormalizationStatus.READY)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND))
-                : bookRepository.findAccessibleBook(bookId, userId, NormalizationStatus.READY)
+        return bookRepository.findByIdAndNormalizationStatus(bookId, NormalizationStatus.READY)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
     }
 

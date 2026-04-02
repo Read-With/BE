@@ -1,27 +1,33 @@
 package com.kw.readwith.dto.admin;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @NoArgsConstructor
 public class CharacterDTO {
 
-    private Long id;
+    @JsonAlias("id")
+    private String characterId;
 
-    @JsonProperty("common_name")
+    @JsonAlias("common_name")
     private String commonName;
 
     private List<String> names;
 
-    @JsonProperty("main_character")
+    @JsonAlias("main_character")
     private boolean isMainCharacter;
 
-    private String description_ko;
+    private Map<String, String> descriptions;
 
-    @JsonProperty("portrait_prompt")
+    @JsonProperty("description_ko")
+    private String legacyDescriptionKo;
+
+    @JsonAlias("portrait_prompt")
     private String portraitPrompt;
 }

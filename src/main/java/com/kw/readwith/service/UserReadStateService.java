@@ -44,7 +44,7 @@ public class UserReadStateService {
         bookAccessPolicy.ensureReadable(book, user.getId());
         transitionGuard.ensureLocatorWritesEnabled("progress 저장");
 
-        LocatorDTO locator = requestDTO.getLocator();
+        LocatorDTO locator = requestDTO.getStartLocator();
         Chapter chapter = validateLocator(book, locator);
         transitionGuard.ensureLocatorMetadataReady(book, chapter, "progress 저장");
         locatorSupport.toTxtOffset(chapter, locator);
@@ -102,9 +102,16 @@ public class UserReadStateService {
     }
 
     private ProgressResponseDTO convertToResponseDTO(UserReadState userReadState) {
+        LocatorDTO locator = locatorSupport.readLocator(userReadState.getLastLocatorJson());
+        Integer startTxtOffset = resolveTxtOffset(userReadState.getBook(), locator);
+
         return ProgressResponseDTO.builder()
                 .bookId(userReadState.getBook().getId())
-                .locator(locatorSupport.readLocator(userReadState.getLastLocatorJson()))
+                .startLocator(locator)
+                .endLocator(null)
+                .startTxtOffset(startTxtOffset)
+                .endTxtOffset(null)
+                .locatorVersion(userReadState.getBook().getLocatorVersion())
                 .updatedAt(userReadState.getUpdatedAt())
                 .build();
     }
@@ -116,5 +123,14 @@ public class UserReadStateService {
 
         return chapterRepository.findByBookIdAndIdx(book.getId(), locator.getChapterIndex())
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+    }
+
+    private Integer resolveTxtOffset(Book book, LocatorDTO locator) {
+        if (locator == null || locator.getChapterIndex() == null) {
+            return null;
+        }
+
+        Chapter chapter = validateLocator(book, locator);
+        return locatorSupport.toTxtOffset(chapter, locator);
     }
 }

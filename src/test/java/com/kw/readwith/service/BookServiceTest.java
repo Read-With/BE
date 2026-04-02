@@ -1,5 +1,6 @@
 package com.kw.readwith.service;
 
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.enums.AnalysisStatus;
@@ -36,8 +37,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -74,8 +77,8 @@ class BookServiceTest {
     @BeforeEach
     void setUp() {
         TransactionSynchronizationManager.initSynchronization();
-        when(normalizationVersionService.resolveStatus(any(Book.class))).thenReturn(NormalizationVersionStatus.NOT_READY);
-        when(normalizationVersionService.needsRenormalization(any(Book.class))).thenReturn(false);
+        lenient().when(normalizationVersionService.resolveStatus(any(Book.class))).thenReturn(NormalizationVersionStatus.NOT_READY);
+        lenient().when(normalizationVersionService.needsRenormalization(any(Book.class))).thenReturn(false);
     }
 
     @AfterEach
@@ -135,8 +138,8 @@ class BookServiceTest {
     }
 
     @Test
-    @DisplayName("uploadBook falls back to request metadata when EPUB metadata is missing")
-    void uploadBookFallsBackToRequestMetadata() {
+    @DisplayName("uploadBook는 제목/저자 메타데이터가 없으면 요청값이 있어도 실패한다")
+    void uploadBookRequiresTitleAndAuthorMetadataFromEpub() {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "custom.epub",
@@ -147,29 +150,8 @@ class BookServiceTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(uploader));
         when(epubMetadataExtractorService.extract(file)).thenReturn(ExtractedEpubMetadata.empty());
-        when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> {
-            Book saved = invocation.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", 202L);
-            return saved;
-        });
-        when(normalizedArtifactStorageService.newSourceVersion()).thenReturn("source-v2");
-        when(normalizedArtifactStorageService.storeSourceEpub(202L, "source-v2", file))
-                .thenReturn("books/202/source/source-v2/book.epub");
-        when(normalizationJobService.createQueuedJob(any(Book.class), eq("source-v2"), eq("UPLOAD")))
-                .thenAnswer(invocation -> ProcessingJob.builder()
-                        .id(77L)
-                        .book(invocation.getArgument(0))
-                        .pipelineType(ProcessingPipelineType.NORMALIZATION)
-                        .runId("run-2")
-                        .sourceVersion("source-v2")
-                        .status(ProcessingJobStatus.QUEUED)
-                        .build());
 
-        BookDetailDTO response = bookService.uploadBook(1L, file, "Manual Title", "Manual Author", "ko");
-
-        assertThat(response.getTitle()).isEqualTo("Manual Title");
-        assertThat(response.getAuthor()).isEqualTo("Manual Author");
-        assertThat(response.getLanguage()).isEqualTo("ko");
+        assertThrows(GeneralException.class, () -> bookService.uploadBook(1L, file, "Manual Title", "Manual Author", "ko"));
     }
 
     private User sampleUser() {

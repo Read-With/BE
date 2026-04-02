@@ -13,6 +13,8 @@ import java.util.Optional;
 
 public interface EventRepository extends JpaRepository<Event, Long> {
 
+    boolean existsByBook(Book book);
+
     boolean existsByBookAndChapter(Book book, Chapter chapter);
     Optional<Event> findByChapterAndIdx(Chapter chapter, Integer idx);
 

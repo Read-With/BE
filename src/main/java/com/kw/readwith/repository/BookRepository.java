@@ -19,6 +19,10 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      */
     List<Book> findBySummaryIsFalse();
 
+    List<Book> findByNormalizationStatus(NormalizationStatus normalizationStatus);
+
+    Optional<Book> findByIdAndNormalizationStatus(Long id, NormalizationStatus normalizationStatus);
+
     /**
      * 접근 가능한 도서 목록 조회 (사용자별)
      * 기본 제공 도서는 READY만 노출, 업로더 본인 도서는 상태와 무관하게 노출

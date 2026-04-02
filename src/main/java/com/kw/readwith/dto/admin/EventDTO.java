@@ -1,6 +1,6 @@
 package com.kw.readwith.dto.admin;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -18,8 +18,7 @@ public class EventDTO {
     private String text;
     private String eventText;
 
-    @JsonProperty("event_id")
+    @JsonAlias("event_id")
     private String eventId;
-
 }
     
