@@ -17,10 +17,10 @@ import com.kw.readwith.dto.graph.FineGraphResponseDTO;
 import com.kw.readwith.dto.graph.GraphNodeDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
-import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.EventCharacterStatRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import com.kw.readwith.repository.EventRepository;
+import com.kw.readwith.util.LocatorSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,9 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -41,39 +42,40 @@ public class FineGraphService {
     private final BookRepository bookRepository;
     private final ChapterRepository chapterRepository;
     private final EventRepository eventRepository;
-    private final CharacterRepository characterRepository;
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final EventCharacterStatRepository eventCharacterStatRepository;
     private final ObjectMapper objectMapper;
     private final V2TransitionGuard transitionGuard;
     private final BookAccessPolicy bookAccessPolicy;
+    private final LocatorSupport locatorSupport;
 
-    public FineGraphResponseDTO getFineGraph(Long bookId, Integer chapterIdx, Integer eventIdx, Long userId) {
+    public FineGraphResponseDTO getFineGraph(
+            Long bookId,
+            Integer chapterIdx,
+            Integer eventIdx,
+            LocatorDTO locator,
+            Long userId
+    ) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
         bookAccessPolicy.ensureReadable(book, userId);
 
         if (!book.isAnalysisReady()) {
-            return FineGraphResponseDTO.builder()
-                    .nodes(List.of())
-                    .edges(List.of())
-                    .eventInfo(null)
-                    .build();
+            return emptyResponse();
         }
 
-        Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), chapterIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
-        Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
+        Event event = resolveEvent(book, chapterIdx, eventIdx, locator).orElse(null);
+        if (event == null) {
+            return emptyResponse();
+        }
+
         transitionGuard.ensureEventLocatorReady(event, "fine graph 조회");
 
         List<EventRelationshipEdge> edges = eventRelationshipEdgeRepository.findByEvent(event);
-        Set<Long> characterIds = edges.stream()
-                .flatMap(edge -> List.of(edge.getFromCharacter().getId(), edge.getToCharacter().getId()).stream())
-                .collect(Collectors.toSet());
+        List<EventCharacterStat> stats = eventCharacterStatRepository.findByEvent(event);
 
-        List<GraphNodeDTO> nodes = characterRepository.findAllById(characterIds).stream()
-                .map(character -> convertToGraphNodeDTO(character, event))
+        List<GraphNodeDTO> nodes = collectCharacters(edges, stats).values().stream()
+                .map(character -> convertToGraphNodeDTO(character, findStat(stats, character)))
                 .toList();
 
         List<FineGraphEdgeDTO> edgeDTOs = edges.stream()
@@ -81,8 +83,8 @@ public class FineGraphService {
                 .toList();
 
         EventInfoDTO eventInfo = EventInfoDTO.builder()
-                .chapterIdx(chapterIdx)
-                .eventIdx(eventIdx)
+                .chapterIdx(event.getChapter().getIdx())
+                .eventIdx(event.getIdx())
                 .eventId(event.getEventId())
                 .startLocator(buildEventLocator(event, true))
                 .endLocator(buildEventLocator(event, false))
@@ -97,15 +99,75 @@ public class FineGraphService {
                 .build();
     }
 
-    private GraphNodeDTO convertToGraphNodeDTO(Character character, Event event) {
-        EventCharacterStat characterStat = eventCharacterStatRepository
-                .findByEventAndCharacter(event, character)
-                .orElse(null);
+    private FineGraphResponseDTO emptyResponse() {
+        return FineGraphResponseDTO.builder()
+                .nodes(List.of())
+                .edges(List.of())
+                .eventInfo(null)
+                .build();
+    }
 
+    private Optional<Event> resolveEvent(Book book, Integer chapterIdx, Integer eventIdx, LocatorDTO locator) {
+        if (locator != null) {
+            return resolveEventByLocator(book, locator);
+        }
+        if (chapterIdx == null || eventIdx == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "chapterIdx/eventIdx or locator is required.");
+        }
+
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), chapterIdx)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        return eventRepository.findByChapterAndIdx(chapter, eventIdx);
+    }
+
+    private Optional<Event> resolveEventByLocator(Book book, LocatorDTO locator) {
+        if (locator.getChapterIndex() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "locator.chapterIndex is required.");
+        }
+
+        Chapter chapter = chapterRepository.findByBookIdAndIdx(book.getId(), locator.getChapterIndex())
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND));
+        transitionGuard.ensureLocatorMetadataReady(book, chapter, "fine graph 조회");
+
+        int txtOffset = locatorSupport.toTxtOffset(chapter, locator);
+        List<Event> events = eventRepository.findByChapterOrderByIdx(chapter);
+
+        return events.stream()
+                .filter(event -> containsOffset(event, txtOffset))
+                .findFirst()
+                .or(() -> events.stream()
+                        .filter(event -> event.getStartTxtOffset() <= txtOffset)
+                        .reduce((first, second) -> second));
+    }
+
+    private boolean containsOffset(Event event, int txtOffset) {
+        return event.getStartTxtOffset() <= txtOffset && txtOffset < event.getEndTxtOffset();
+    }
+
+    private Map<Long, Character> collectCharacters(List<EventRelationshipEdge> edges, List<EventCharacterStat> stats) {
+        Map<Long, Character> characters = new LinkedHashMap<>();
+        for (EventCharacterStat stat : stats) {
+            characters.put(stat.getCharacter().getId(), stat.getCharacter());
+        }
+        for (EventRelationshipEdge edge : edges) {
+            characters.put(edge.getFromCharacter().getId(), edge.getFromCharacter());
+            characters.put(edge.getToCharacter().getId(), edge.getToCharacter());
+        }
+        return characters;
+    }
+
+    private EventCharacterStat findStat(List<EventCharacterStat> stats, Character character) {
+        return stats.stream()
+                .filter(stat -> stat.getCharacter().getId().equals(character.getId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private GraphNodeDTO convertToGraphNodeDTO(Character character, EventCharacterStat characterStat) {
         Float weight = characterStat != null ? (float) characterStat.getNodeWeight() : null;
 
         return GraphNodeDTO.builder()
-                .id(character.getId())
+                .id(character.getCharacterId())
                 .label(character.getName())
                 .isMainCharacter(character.isMainCharacter())
                 .profileImage(character.getProfileImage())
@@ -131,8 +193,8 @@ public class FineGraphService {
         }
 
         return FineGraphEdgeDTO.builder()
-                .from(edge.getFromCharacter().getId())
-                .to(edge.getToCharacter().getId())
+                .from(edge.getFromCharacter().getCharacterId())
+                .to(edge.getToCharacter().getCharacterId())
                 .sentimentScore(edge.getSentimentScore() != null ? edge.getSentimentScore().doubleValue() : 0.0)
                 .interactionCount(edge.getInteractionCount())
                 .relationTags(relationTags)

@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -18,6 +19,10 @@ public interface EventCharacterStatRepository extends JpaRepository<EventCharact
     boolean existsByBook(@Param("book") Book book);
 
     Optional<EventCharacterStat> findByEventAndCharacter(Event event, Character character);
+
+    List<EventCharacterStat> findByEvent(Event event);
+
+    List<EventCharacterStat> findByEventIn(List<Event> events);
 
     boolean existsByEvent(Event event);
 
