@@ -1,49 +1,35 @@
 package com.kw.readwith.dto.manifest;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
 @Getter
 @Builder
+@Schema(description = "매니페스트 안의 인물 정보")
 public class CharacterManifestDTO {
-    
-    /**
-     * 인물 ID (책 내 고유 ID)
-     */
+
+    @Schema(description = "책 내부 characterId", example = "7")
     private Long id;
-    
-    /**
-     * 인물 이름
-     */
+
+    @Schema(description = "대표 이름")
     private String name;
-    
-    /**
-     * 인물이 불리는 다른 이름들
-     */
+
+    @Schema(description = "이름/별칭 묶음 문자열", nullable = true)
     private String names;
-    
-    /**
-     * 프로필 이미지 URL
-     */
+
+    @Schema(description = "프로필 이미지 URL", nullable = true)
     private String profileImage;
-    
-    /**
-     * 주요 인물 여부
-     */
+
+    @Schema(description = "주요 인물 여부")
     private Boolean isMainCharacter;
-    
-    /**
-     * 첫 등장 챕터
-     */
+
+    @Schema(description = "처음 등장한 챕터 인덱스", nullable = true)
     private Integer firstChapterIdx;
-    
-    /**
-     * 성격/인물 설명
-     */
+
+    @Schema(description = "인물 설명", nullable = true)
     private String personalityText;
-    
-    /**
-     * 프로필 묘사
-     */
+
+    @Schema(description = "이미지 생성용 프롬프트 또는 프로필 텍스트", nullable = true)
     private String profileText;
 }

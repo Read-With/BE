@@ -1,31 +1,26 @@
 package com.kw.readwith.dto.manifest;
 
-import lombok.*;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * Progress API 메타데이터 DTO
- * Manifest API에서 Progress 계산에 필요한 메타데이터를 제공
- */
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "진도 계산에 필요한 챕터 길이 메타데이터")
 public class ProgressMetadataDTO {
-    
-    /**
-     * 최대 챕터 수
-     */
+
+    @Schema(description = "가장 마지막 챕터 인덱스", example = "30")
     private Integer maxChapter;
-    
-    /**
-     * 각 챕터별 글자수
-     */
+
+    @Schema(description = "챕터별 길이 목록")
     private List<ChapterLengthDTO> chapterLengths;
-    
-    /**
-     * 책 전체 글자수
-     */
+
+    @Schema(description = "도서 전체 길이", example = "125430")
     private Integer totalLength;
 }
