@@ -85,7 +85,9 @@ locator:
 
 api:
   contract:
-    mode: ${API_CONTRACT_MODE:prepare}
+    # v2로 완전히 대체된 manifest/progress/bookmark/graph/admin legacy 경로는 기본 차단한다.
+    # books/favorites/pov-summaries 계열은 아직 일부 클라이언트 전환 확인 전이라 인터셉터에서 제외되어 있다.
+    mode: ${API_CONTRACT_MODE:v2_only}
 
 # JWT 설정
 jwt:
