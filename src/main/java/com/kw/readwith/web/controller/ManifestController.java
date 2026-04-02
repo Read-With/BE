@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Manifest", description = "Book manifest API")
+@Tag(name = "매니페스트", description = "리더 초기 진입에 필요한 도서 메타데이터 조회 API입니다.")
 public class ManifestController {
 
     private final ManifestService manifestService;
@@ -48,25 +48,25 @@ public class ManifestController {
 
     @GetMapping({"/api/books/{bookId}/manifest", "/api/v2/books/{bookId}/manifest"})
     @Operation(
-            summary = "Get book manifest",
-            description = "Returns the shared manifest payload used to bootstrap the reader."
+            summary = "도서 매니페스트 조회",
+            description = "리더 화면을 시작할 때 필요한 도서, 챕터, 이벤트, 인물, reader artifact 정보를 한 번에 조회합니다."
     )
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
-                    description = "Manifest returned successfully"
+                    description = "매니페스트 조회 성공"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "404",
-                    description = "Book not found or not accessible"
+                    description = "도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다."
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "400",
-                    description = "Invalid request"
+                    description = "잘못된 요청입니다."
             )
     })
     public ApiResponse<ManifestResponseDTO> getBookManifest(
-            @Parameter(description = "Book ID", required = true, example = "42")
+            @Parameter(description = "조회할 도서 ID", required = true, example = "42")
             @PathVariable Long bookId) {
 
         Long userId = getCurrentUserId();

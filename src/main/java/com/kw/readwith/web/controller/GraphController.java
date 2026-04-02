@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping({"/api/graph", "/api/v2/graph"})
 @RequiredArgsConstructor
-@Tag(name = "Graph", description = "?몃Ъ 愿怨?洹몃옒??API")
+@Tag(name = "관계 그래프", description = "인물 관계 그래프 조회 API입니다.")
 public class GraphController {
 
     private final FineGraphService fineGraphService;
@@ -38,21 +38,21 @@ public class GraphController {
 
     @GetMapping("/fine")
     @Operation(
-            summary = "?몃?(?대깽?? 洹몃옒??議고쉶",
-            description = "locator ? chapterIdx/eventIdx 湲곕컲?쇰줈 ?대깽??洹몃옒?꾨? 議고쉶?⑸땲??"
+            summary = "이벤트 단위 그래프 조회",
+            description = "특정 이벤트 시점의 관계 그래프를 조회합니다. `locator` 또는 legacy `chapterIdx/eventIdx` 조합 중 하나를 사용합니다."
     )
     public ApiResponse<FineGraphResponseDTO> getFineGraph(
-            @Parameter(description = "梨?ID", required = true, example = "1")
+            @Parameter(description = "조회할 도서 ID", required = true, example = "1")
             @RequestParam Long bookId,
-            @Parameter(description = "legacy chapter index", example = "1")
+            @Parameter(description = "legacy 챕터 인덱스. locator를 쓰지 않을 때만 사용합니다.", example = "1")
             @RequestParam(required = false) Integer chapterIdx,
-            @Parameter(description = "legacy event index", example = "3")
+            @Parameter(description = "legacy 이벤트 인덱스. locator를 쓰지 않을 때만 사용합니다.", example = "3")
             @RequestParam(required = false) Integer eventIdx,
-            @Parameter(description = "locator chapter index", example = "1")
+            @Parameter(description = "locator의 챕터 인덱스", example = "1")
             @RequestParam(required = false) Integer chapterIndex,
-            @Parameter(description = "locator block index", example = "2")
+            @Parameter(description = "locator의 블록 인덱스", example = "2")
             @RequestParam(required = false) Integer blockIndex,
-            @Parameter(description = "locator offset", example = "5")
+            @Parameter(description = "locator의 블록 내부 offset", example = "5")
             @RequestParam(required = false) Integer offset) {
 
         Long userId = getCurrentUserId();
@@ -63,19 +63,19 @@ public class GraphController {
 
     @GetMapping("/macro")
     @Operation(
-            summary = "嫄곗떆(梨뺥꽣 ?꾩쟻) 洹몃옒??議고쉶",
-            description = "uptoLocator ? uptoChapter 湲곕컲?쇰줈 ?꾩쟻 愿怨?洹몃옒?꾨? 議고쉶?⑸땲??"
+            summary = "누적 그래프 조회",
+            description = "사용자가 특정 위치까지 읽었을 때의 누적 관계 그래프를 조회합니다. `uptoLocator` 또는 legacy `uptoChapter`를 사용할 수 있습니다."
     )
     public ApiResponse<MacroGraphResponseDTO> getMacroGraph(
-            @Parameter(description = "梨?ID", required = true, example = "1")
+            @Parameter(description = "조회할 도서 ID", required = true, example = "1")
             @RequestParam Long bookId,
-            @Parameter(description = "legacy upto chapter", example = "3")
+            @Parameter(description = "legacy 누적 기준 챕터. locator를 쓰지 않을 때만 사용합니다.", example = "3")
             @RequestParam(required = false) Integer uptoChapter,
-            @Parameter(description = "locator chapter index", example = "3")
+            @Parameter(description = "locator의 챕터 인덱스", example = "3")
             @RequestParam(required = false) Integer chapterIndex,
-            @Parameter(description = "locator block index", example = "2")
+            @Parameter(description = "locator의 블록 인덱스", example = "2")
             @RequestParam(required = false) Integer blockIndex,
-            @Parameter(description = "locator offset", example = "5")
+            @Parameter(description = "locator의 블록 내부 offset", example = "5")
             @RequestParam(required = false) Integer offset) {
 
         Long userId = getCurrentUserId();
