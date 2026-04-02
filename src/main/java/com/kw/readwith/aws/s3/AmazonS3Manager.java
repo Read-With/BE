@@ -1,6 +1,8 @@
 package com.kw.readwith.aws.s3;
 
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
+import com.amazonaws.HttpMethod;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.kw.readwith.config.AmazonConfig;
@@ -12,7 +14,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.Base64;
+import java.util.Date;
 import java.util.UUID;
 
 @Slf4j
@@ -56,6 +60,18 @@ public class AmazonS3Manager {
 
     public String getObjectUrl(String keyName) {
         return amazonS3.getUrl(amazonConfig.getBucket(), keyName).toString();
+    }
+
+    public String generatePresignedGetUrl(String keyName, Duration ttl) {
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            throw new IllegalArgumentException("Presigned URL TTL must be positive.");
+        }
+
+        Date expiration = new Date(System.currentTimeMillis() + ttl.toMillis());
+        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(amazonConfig.getBucket(), keyName)
+                .withMethod(HttpMethod.GET)
+                .withExpiration(expiration);
+        return amazonS3.generatePresignedUrl(request).toString();
     }
 
     public String uploadFileFromBase64(String keyName, String base64Data, String contentType) {

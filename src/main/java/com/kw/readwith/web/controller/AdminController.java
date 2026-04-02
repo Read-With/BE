@@ -1,9 +1,11 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.dto.admin.AnalysisInputResponseDTO;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.service.AdminService;
+import com.kw.readwith.service.AnalysisInputExportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,10 +25,11 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping({"/api/admin", "/api/v2/admin"})
-@Tag(name = "관리자 업로드", description = "AI/관리자 산출물을 책에 적재하는 업로드 API입니다.")
+@Tag(name = "관리자 업로드", description = "AI/관리자 산출물 적재와 운영 보조 기능을 제공하는 API입니다.")
 public class AdminController {
 
     private final AdminService adminService;
+    private final AnalysisInputExportService analysisInputExportService;
 
     @Operation(
             summary = "인물 업로드",
@@ -40,7 +43,7 @@ public class AdminController {
         return ApiResponse.onSuccess("Characters have been successfully uploaded.");
     }
 
-    @Operation(summary = "인물 전체 삭제", description = "특정 책에 적재된 인물 정보를 모두 삭제합니다.")
+    @Operation(summary = "인물 전체 삭제", description = "특정 도서에 적재된 인물 정보를 모두 삭제합니다.")
     @DeleteMapping("/books/{bookId}/characters")
     public ApiResponse<String> deleteCharacters(
             @Parameter(description = "삭제 대상 도서 ID", required = true) @PathVariable Long bookId) {
@@ -103,6 +106,17 @@ public class AdminController {
         return ApiResponse.onSuccess("Chapter summaries have been successfully uploaded.");
     }
 
+    @Operation(
+            summary = "AI 분석 입력 산출물 조회",
+            description = "정규화가 완료된 도서의 `meta.json`과 챕터별 `chapter_*.txt`를 presigned URL로 내려줍니다. AI 서버는 이 응답을 받아 만료 시간 안에 private S3 산출물을 다운로드하면 됩니다."
+    )
+    @GetMapping("/books/{bookId}/analysis-input")
+    public ApiResponse<AnalysisInputResponseDTO> getAnalysisInput(
+            @Parameter(description = "정규화 산출물을 조회할 도서 ID", required = true) @PathVariable Long bookId) {
+        AnalysisInputResponseDTO response = analysisInputExportService.getAnalysisInput(bookId);
+        return ApiResponse.onSuccess(response);
+    }
+
     @Operation(summary = "챕터 요약 삭제", description = "특정 챕터에 적재된 POV summary를 삭제합니다.")
     @DeleteMapping("/books/{bookId}/chapters/{chapterIdx}/summary")
     public ApiResponse<String> deleteChapterSummary(
@@ -112,7 +126,7 @@ public class AdminController {
         return ApiResponse.onSuccess("Chapter summary has been successfully deleted.");
     }
 
-    @Operation(summary = "미요약 도서 목록 조회", description = "legacy summary 플래그 기준으로 아직 요약이 완료되지 않은 책을 조회합니다.")
+    @Operation(summary = "미요약 도서 목록 조회", description = "legacy summary 플래그 기준으로 아직 요약이 완료되지 않은 도서를 조회합니다.")
     @GetMapping("/books/unsummarized")
     public ApiResponse<List<BookSummaryDTO>> getUnsummarizedBooks() {
         List<BookSummaryDTO> response = adminService.getUnsummarizedBooks();
@@ -128,7 +142,7 @@ public class AdminController {
 
     @Operation(
             summary = "캐릭터 이미지 재생성",
-            description = "특정 캐릭터의 프로필 이미지를 다시 생성합니다. 기존 이미지 품질이 낮거나 생성에 실패했을 때 사용합니다.",
+            description = "특정 캐릭터의 프로필 이미지를 다시 생성합니다. 기존 이미지가 없거나 생성이 실패했을 때 사용합니다.",
             security = {}
     )
     @PostMapping(

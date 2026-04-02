@@ -79,6 +79,7 @@ artifact:
     public-prefix: ${ARTIFACT_PUBLIC_PREFIX:public}
     private-prefix: ${ARTIFACT_PRIVATE_PREFIX:private}
     cloud-front-base-url: ${CLOUDFRONT_BASE_URL:}
+    private-url-ttl: ${ARTIFACT_PRIVATE_URL_TTL:1h}
 
 locator:
   mode: ${LOCATOR_MODE:on}
