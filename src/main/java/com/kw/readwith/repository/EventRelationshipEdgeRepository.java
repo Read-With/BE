@@ -2,13 +2,19 @@ package com.kw.readwith.repository;
 
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
+import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
 public interface EventRelationshipEdgeRepository extends JpaRepository<EventRelationshipEdge, Long> {
+    @Query("SELECT CASE WHEN COUNT(edge) > 0 THEN true ELSE false END FROM EventRelationshipEdge edge WHERE edge.event.book = :book")
+    boolean existsByBook(@Param("book") Book book);
+
     boolean existsByEvent(Event event);
 
     /**

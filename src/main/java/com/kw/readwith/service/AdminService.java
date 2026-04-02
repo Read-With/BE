@@ -22,6 +22,7 @@ import com.kw.readwith.util.LocatorSupport;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,12 +40,12 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true) // 기본적으로 읽기 전용 트랜잭션으로 설정
+@Transactional(readOnly = true) // 疫꿸퀡??怨몄몵嚥???꾨┛ ?袁⑹뒠 ?紐껋삏?????곗쨮 ??쇱젟
 public class AdminService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminService.class);
 
-    // 모든 관리자 기능에 필요한 Repository 및 ObjectMapper 의존성 주입
+    // 筌뤴뫀諭??온?귐딆쁽 疫꿸퀡????袁⑹뒄??Repository 獄?ObjectMapper ??뤵??雅뚯눘??
     private final BookRepository bookRepository;
     private final CharacterRepository characterRepository;
     private final ChapterRepository chapterRepository;
@@ -54,6 +55,7 @@ public class AdminService {
     private final EventCharacterStatRepository statRepository;
     private final ObjectMapper objectMapper;
     private final CharacterImageService characterImageService;
+    private final BookAnalysisStatusService bookAnalysisStatusService;
     private final LocatorSupport locatorSupport;
     private final V2TransitionGuard transitionGuard;
     private final NormalizationVersionService normalizationVersionService;
@@ -63,17 +65,17 @@ public class AdminService {
 
     /*
      * =====================================================================================
-     * 1. 데이터 업로드
+     * 1. ?怨쀬뵠????낆쨮??
      * =====================================================================================
      */
 
     /**
-     * 등장인물 정보가 담긴 JSON 파일을 업로드합니다.
+     * ?源놁삢?紐꺪??類ｋ궖揶쎛 ??용┸ JSON ???뵬????낆쨮??쀫???덈뼄.
      */
     @Transactional
     public int uploadCharacters(Long bookId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "업로드 파일이 비어있습니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Upload file is empty.");
         }
 
         Book book = bookRepository.findById(bookId)
@@ -81,13 +83,13 @@ public class AdminService {
 
         try {
             CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterListDTO.class);
-
             if (characterListDTO == null || characterListDTO.getItems() == null) {
-                throw new GeneralException(ErrorStatus._BAD_REQUEST, "캐릭터 데이터가 올바르지 않습니다.");
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "Character payload is invalid.");
             }
 
             if (characterListDTO.getItems().isEmpty()) {
-                log.warn("업로드할 캐릭터가 없습니다.");
+                log.warn("No characters found in upload payload.");
+                bookAnalysisStatusService.refreshStatus(bookId);
                 return 0;
             }
 
@@ -100,7 +102,7 @@ public class AdminService {
 
                 Optional<Character> existingCharacter = characterRepository.findByBookAndCharacterId(book, characterId);
                 if (existingCharacter.isPresent()) {
-                    log.info("캐릭터 ID '{}' 이미 존재하여 스킵", characterId);
+                    log.info("Skip existing character id={}", characterId);
                     continue;
                 }
 
@@ -119,309 +121,338 @@ public class AdminService {
             }
 
             if (newCharacters.isEmpty()) {
-                log.info("저장할 새로운 캐릭터가 없습니다.");
+                log.info("No new characters to save.");
+                bookAnalysisStatusService.refreshStatus(bookId);
                 return 0;
             }
 
-            //  DB 저장 with 예외 처리
             List<Character> savedCharacters;
             try {
                 savedCharacters = characterRepository.saveAll(newCharacters);
-                log.info("캐릭터 {}명 DB 저장 완료", savedCharacters.size());
+                log.info("Saved {} characters.", savedCharacters.size());
             } catch (Exception e) {
-                log.error("캐릭터 DB 저장 실패", e);
-                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "캐릭터 저장 중 데이터베이스 오류가 발생했습니다.");
+                log.error("Failed to save characters.", e);
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to save characters.");
             }
-                
-            // 캐릭터 ID만 추출하여 비동기 메서드에 전달
+
             List<Long> characterIds = savedCharacters.stream()
                     .map(Character::getId)
                     .collect(Collectors.toList());
-            
-            // 이미지 생성 (실패해도 계속 진행)
+
             try {
-                log.info("캐릭터 이미지 생성 백그라운드 작업 시작");
                 characterImageService.generateImagesAsync(characterIds);
             } catch (Exception e) {
-                log.error("캐릭터 이미지 생성 시작 실패 (백그라운드 작업, 계속 진행)", e);
+                log.error("Failed to start character image generation.", e);
             }
-            
-            return savedCharacters.size();
 
+            bookAnalysisStatusService.refreshStatus(bookId);
+            return savedCharacters.size();
         } catch (IOException e) {
-            log.error("캐릭터 JSON 파일 파싱 실패", e);
-            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "JSON 파일 형식이 올바르지 않습니다.");
+            log.error("Failed to parse character upload JSON.", e);
+            GeneralException exception = new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Invalid character JSON payload.");
+            markAnalysisRejectedIfNeeded(book, exception);
+            throw exception;
         } catch (GeneralException e) {
+            markAnalysisRejectedIfNeeded(book, e);
             throw e;
         } catch (Exception e) {
-            log.error("캐릭터 업로드 중 예상치 못한 오류", e);
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "캐릭터 업로드 처리 중 오류가 발생했습니다.");
+            log.error("Unexpected failure while uploading characters.", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to upload characters.");
         }
     }
 
     /**
-     * 여러 챕터의 이벤트 JSON 파일들을 한번에 업로드합니다.
+     * ????筌?벤苑????源??JSON ???뵬??쇱뱽 ??뺤쓰????낆쨮??쀫???덈뼄.
      */
     @Transactional
     public int uploadEvents(Long bookId, List<MultipartFile> eventFiles) {
         if (eventFiles == null || eventFiles.isEmpty()) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "업로드할 이벤트 파일이 없습니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "No event files provided.");
         }
 
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
         transitionGuard.ensureLocatorWritesEnabled("admin event upload");
 
-        List<Event> allNewEvents = new ArrayList<>();
+        try {
+            List<Event> allNewEvents = new ArrayList<>();
 
-        for (MultipartFile eventFile : eventFiles) {
-            if (eventFile == null || eventFile.isEmpty()) {
-                log.warn("빈 파일이 포함되어 스킵합니다.");
-                continue;
-            }
-
-            try {
-                EventUploadDTO uploadDTO = objectMapper.readValue(eventFile.getInputStream(), EventUploadDTO.class);
-                if (uploadDTO == null || uploadDTO.getChapterIndex() == null) {
-                    throw new GeneralException(ErrorStatus._BAD_REQUEST, "event payload chapterIndex는 필수입니다.");
-                }
-
-                Integer chapterIdx = uploadDTO.getChapterIndex();
-                Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                        .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "챕터 인덱스 " + chapterIdx + "를 찾을 수 없습니다."));
-                transitionGuard.ensureLocatorMetadataReady(book, chapter, "admin event upload");
-
-                if (eventRepository.existsByChapter(chapter)) {
-                    throw new GeneralException(ErrorStatus.EVENT_DATA_ALREADY_EXISTS, "챕터 " + chapterIdx + "의 이벤트는 이미 존재합니다.");
-                }
-
-                List<EventDTO> eventDTOs = uploadDTO.getItems();
-                if (eventDTOs == null || eventDTOs.isEmpty()) {
-                    log.warn("파일 '{}'에 이벤트 데이터가 없습니다.", eventFile.getOriginalFilename());
+            for (MultipartFile eventFile : eventFiles) {
+                if (eventFile == null || eventFile.isEmpty()) {
+                    log.warn("Skip empty event file.");
                     continue;
                 }
 
-                Set<Integer> seenEventIndexes = new LinkedHashSet<>();
-                List<Event> newEventsFromFile = new ArrayList<>();
-                for (EventDTO dto : eventDTOs) {
-                    String eventId = requireText(dto.getEventId(), "event.eventId");
-                    if (dto.getChapterIndex() != null && !chapterIdx.equals(dto.getChapterIndex())) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "payload chapterIndex가 root chapterIndex와 일치하지 않습니다.");
+                try {
+                    EventUploadDTO uploadDTO = objectMapper.readValue(eventFile.getInputStream(), EventUploadDTO.class);
+                    if (uploadDTO == null || uploadDTO.getChapterIndex() == null) {
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "event payload chapterIndex is required.");
                     }
 
-                    Integer startTxtOffset = dto.getStartTxtOffset() != null ? dto.getStartTxtOffset() : dto.getStart();
-                    Integer endTxtOffset = dto.getEndTxtOffset() != null ? dto.getEndTxtOffset() : dto.getEnd();
-                    if (startTxtOffset == null || endTxtOffset == null) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "이벤트 위치 정보가 없습니다: " + eventId);
-                    }
-                    if (startTxtOffset >= endTxtOffset) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "이벤트 txtOffset 범위가 올바르지 않습니다: " + eventId);
-                    }
+                    Integer chapterIdx = uploadDTO.getChapterIndex();
+                    Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                            .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "Chapter not found: " + chapterIdx));
+                    transitionGuard.ensureLocatorMetadataReady(book, chapter, "admin event upload");
 
-                    String rawText = requireRawText(dto.getEventText() != null ? dto.getEventText() : dto.getText(), "event.eventText");
-                    validateEventText(chapter, startTxtOffset, endTxtOffset, rawText, eventId);
-
-                    Integer eventIdx = parseEventIdx(eventId, chapterIdx);
-                    if (!seenEventIndexes.add(eventIdx)) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "중복 eventId가 포함되어 있습니다: " + eventId);
+                    if (eventRepository.existsByChapter(chapter)) {
+                        throw new GeneralException(ErrorStatus.EVENT_DATA_ALREADY_EXISTS, "Events already exist for chapter " + chapterIdx);
                     }
 
-                    String normalizedEventId = normalizeEventId(eventId, chapterIdx, eventIdx);
-                    LocatorDTO startLocator = resolveEventLocator(chapter, startTxtOffset);
-                    LocatorDTO endLocator = resolveEventLocator(chapter, endTxtOffset);
+                    List<EventDTO> eventDTOs = uploadDTO.getItems();
+                    if (eventDTOs == null || eventDTOs.isEmpty()) {
+                        log.warn("No events found in file {}", eventFile.getOriginalFilename());
+                        continue;
+                    }
 
-                    Event event = Event.builder()
-                            .book(book)
-                            .chapter(chapter)
-                            .idx(eventIdx)
-                            .eventId(normalizedEventId)
-                            .startBlockIndex(startLocator != null ? startLocator.getBlockIndex() : null)
-                            .startOffset(startLocator != null ? startLocator.getOffset() : null)
-                            .endBlockIndex(endLocator != null ? endLocator.getBlockIndex() : null)
-                            .endOffset(endLocator != null ? endLocator.getOffset() : null)
-                            .startTxtOffset(startTxtOffset)
-                            .endTxtOffset(endTxtOffset)
-                            .rawText(rawText != null ? rawText : "")
-                            .build();
-                    newEventsFromFile.add(event);
+                    Set<Integer> seenEventIndexes = new LinkedHashSet<>();
+                    List<Event> newEventsFromFile = new ArrayList<>();
+                    for (EventDTO dto : eventDTOs) {
+                        String eventId = requireText(dto.getEventId(), "event.eventId");
+                        if (dto.getChapterIndex() != null && !chapterIdx.equals(dto.getChapterIndex())) {
+                            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Root chapterIndex and item chapterIndex do not match.");
+                        }
+
+                        Integer startTxtOffset = dto.getStartTxtOffset() != null ? dto.getStartTxtOffset() : dto.getStart();
+                        Integer endTxtOffset = dto.getEndTxtOffset() != null ? dto.getEndTxtOffset() : dto.getEnd();
+                        if (startTxtOffset == null || endTxtOffset == null) {
+                            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Missing txt offsets for event " + eventId);
+                        }
+                        if (startTxtOffset >= endTxtOffset) {
+                            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Invalid txt offset range for event " + eventId);
+                        }
+
+                        String rawText = requireRawText(dto.getEventText() != null ? dto.getEventText() : dto.getText(), "event.eventText");
+                        validateEventText(chapter, startTxtOffset, endTxtOffset, rawText, eventId);
+
+                        Integer eventIdx = parseEventIdx(eventId, chapterIdx);
+                        if (!seenEventIndexes.add(eventIdx)) {
+                            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Duplicate eventId in payload: " + eventId);
+                        }
+
+                        String normalizedEventId = normalizeEventId(eventId, chapterIdx, eventIdx);
+                        LocatorDTO startLocator = resolveEventLocator(chapter, startTxtOffset);
+                        LocatorDTO endLocator = resolveEventLocator(chapter, endTxtOffset);
+
+                        Event event = Event.builder()
+                                .book(book)
+                                .chapter(chapter)
+                                .idx(eventIdx)
+                                .eventId(normalizedEventId)
+                                .startBlockIndex(startLocator != null ? startLocator.getBlockIndex() : null)
+                                .startOffset(startLocator != null ? startLocator.getOffset() : null)
+                                .endBlockIndex(endLocator != null ? endLocator.getBlockIndex() : null)
+                                .endOffset(endLocator != null ? endLocator.getOffset() : null)
+                                .startTxtOffset(startTxtOffset)
+                                .endTxtOffset(endTxtOffset)
+                                .rawText(rawText)
+                                .build();
+                        newEventsFromFile.add(event);
+                    }
+
+                    allNewEvents.addAll(newEventsFromFile);
+                    log.info("Parsed {} events from {}", newEventsFromFile.size(), eventFile.getOriginalFilename());
+                } catch (IOException e) {
+                    log.error("Failed to parse event file {}", eventFile.getOriginalFilename(), e);
+                    throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse event JSON: " + eventFile.getOriginalFilename());
                 }
-
-                allNewEvents.addAll(newEventsFromFile);
-                log.info("파일 '{}' 처리 완료: {}개 이벤트", eventFile.getOriginalFilename(), newEventsFromFile.size());
-
-            } catch (IOException e) {
-                log.error("이벤트 JSON 파일 파싱 실패: {}", eventFile.getOriginalFilename(), e);
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "JSON 파일 파싱 실패: " + eventFile.getOriginalFilename());
             }
-        }
 
-        if (allNewEvents.isEmpty()) {
-            log.warn("저장할 이벤트가 없습니다.");
-            return 0;
-        }
-        
-        int batchSize = 500;
-        int totalSaved = 0;
-        
-        try {
-            for (int i = 0; i < allNewEvents.size(); i += batchSize) {
-                int end = Math.min(i + batchSize, allNewEvents.size());
-                List<Event> batch = allNewEvents.subList(i, end);
-                
-                eventRepository.saveAll(batch);
-                entityManager.flush();   // 즉시 DB 반영
-                entityManager.clear();   // 1차 캐시 비우기 (메모리 절약)
-                
-                totalSaved += batch.size();
-                log.info("이벤트 배치 진행: {}/{}", totalSaved, allNewEvents.size());
+            if (allNewEvents.isEmpty()) {
+                log.warn("No new events to save.");
+                bookAnalysisStatusService.refreshStatus(bookId);
+                return 0;
             }
-            log.info("이벤트 {}개 DB 저장 완료", totalSaved);
-        } catch (Exception e) {
-            log.error("이벤트 DB 저장 실패", e);
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "이벤트 저장 중 데이터베이스 오류가 발생했습니다.");
+
+            int batchSize = 500;
+            int totalSaved = 0;
+            try {
+                for (int i = 0; i < allNewEvents.size(); i += batchSize) {
+                    int end = Math.min(i + batchSize, allNewEvents.size());
+                    List<Event> batch = allNewEvents.subList(i, end);
+                    eventRepository.saveAll(batch);
+                    entityManager.flush();
+                    entityManager.clear();
+                    totalSaved += batch.size();
+                }
+                log.info("Saved {} events.", totalSaved);
+            } catch (Exception e) {
+                log.error("Failed to save events.", e);
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to save events.");
+            }
+
+            bookAnalysisStatusService.refreshStatus(bookId);
+            return totalSaved;
+        } catch (GeneralException e) {
+            markAnalysisRejectedIfNeeded(book, e);
+            throw e;
         }
-        
-        return totalSaved;
     }
 
     /**
-     * 여러 챕터의 POV 요약 JSON 파일들을 한번에 업로드합니다.
+     * ????筌?벤苑??POV ?遺용튋 JSON ???뵬??쇱뱽 ??뺤쓰????낆쨮??쀫???덈뼄.
      */
     @Transactional
     public int uploadChapterSummaries(Long bookId, List<MultipartFile> summaryFiles) {
         if (summaryFiles == null || summaryFiles.isEmpty()) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "업로드할 요약 파일이 없습니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "No summary files provided.");
         }
 
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
-        List<CharacterPovSummary> allNewSummaries = new ArrayList<>();
-
-        for (MultipartFile summaryFile : summaryFiles) {
-            if (summaryFile == null || summaryFile.isEmpty()) {
-                log.warn("빈 요약 파일이 포함되어 스킵합니다.");
-                continue;
-            }
-
-            SummaryUploadDTO uploadDTO;
-            try {
-                uploadDTO = objectMapper.readValue(summaryFile.getInputStream(), SummaryUploadDTO.class);
-            } catch (IOException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR);
-            }
-
-            if (uploadDTO == null || uploadDTO.getChapterIndex() == null) {
-                throw new GeneralException(ErrorStatus._BAD_REQUEST, "summary payload chapterIndex는 필수입니다.");
-            }
-            if (uploadDTO.getLanguage() != null && !"ko".equalsIgnoreCase(uploadDTO.getLanguage())) {
-                log.info("요약 파일 '{}'은(는) ko가 아니므로 스킵합니다. language={}",
-                        summaryFile.getOriginalFilename(), uploadDTO.getLanguage());
-                continue;
-            }
-
-            Integer chapterIdx = uploadDTO.getChapterIndex();
-            Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "챕터 인덱스 " + chapterIdx + "를 찾을 수 없습니다."));
-
-            if (characterPovSummaryRepository.existsByChapter(chapter)) {
-                throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED, "챕터 " + chapterIdx + "의 요약본은 이미 존재합니다.");
-            }
-
-            if (uploadDTO.getItems() != null) {
-                List<CharacterPovSummary> newSummariesFromFile = uploadDTO.getItems().stream()
-                        .map(item -> {
-                            Long characterId = parseCharacterId(item.getCharacterId(), "summary.characterId");
-                            Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterId)
-                                    .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND,
-                                            "Character not found with jsonId: " + characterId));
-
-                            return CharacterPovSummary.builder()
-                                    .book(chapter.getBook())
-                                    .chapter(chapter)
-                                    .character(character)
-                                    .summaryText(requireText(item.getSummary(), "summary.summary"))
-                                    .build();
-                        })
-                        .collect(Collectors.toList());
-                allNewSummaries.addAll(newSummariesFromFile);
-            }
-            chapter.markAsSummarized();
-        }
-
-        if (!allNewSummaries.isEmpty()) {
-            try {
-                characterPovSummaryRepository.saveAll(allNewSummaries);
-                log.info("챕터 요약 {}개 DB 저장 완료", allNewSummaries.size());
-            } catch (Exception e) {
-                log.error("챕터 요약 DB 저장 실패", e);
-                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "챕터 요약 저장 중 데이터베이스 오류가 발생했습니다.");
-            }
-        }
-
         try {
-            checkAndUpdateBookSummaryStatus(book);
-        } catch (Exception e) {
-            log.error("책 요약 상태 업데이트 중 오류 발생", e);
+            List<CharacterPovSummary> allNewSummaries = new ArrayList<>();
+
+            for (MultipartFile summaryFile : summaryFiles) {
+                if (summaryFile == null || summaryFile.isEmpty()) {
+                    log.warn("Skip empty summary file.");
+                    continue;
+                }
+
+                SummaryUploadDTO uploadDTO;
+                try {
+                    uploadDTO = objectMapper.readValue(summaryFile.getInputStream(), SummaryUploadDTO.class);
+                } catch (IOException e) {
+                    throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse summary JSON.");
+                }
+
+                if (uploadDTO == null || uploadDTO.getChapterIndex() == null) {
+                    throw new GeneralException(ErrorStatus._BAD_REQUEST, "summary payload chapterIndex is required.");
+                }
+                if (uploadDTO.getLanguage() != null && !"ko".equalsIgnoreCase(uploadDTO.getLanguage())) {
+                    log.info("Skip non-ko summary file {} language={}", summaryFile.getOriginalFilename(), uploadDTO.getLanguage());
+                    continue;
+                }
+
+                Integer chapterIdx = uploadDTO.getChapterIndex();
+                Chapter chapter = chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)
+                        .orElseThrow(() -> new GeneralException(ErrorStatus.CHAPTER_NOT_FOUND, "Chapter not found: " + chapterIdx));
+
+                if (characterPovSummaryRepository.existsByChapter(chapter)) {
+                    throw new GeneralException(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED, "Chapter summary already exists: " + chapterIdx);
+                }
+
+                if (uploadDTO.getItems() != null) {
+                    List<CharacterPovSummary> newSummariesFromFile = uploadDTO.getItems().stream()
+                            .map(this::validateSummaryItem)
+                            .map(item -> buildCharacterPovSummary(chapter, item))
+                            .collect(Collectors.toList());
+                    allNewSummaries.addAll(newSummariesFromFile);
+                }
+
+                chapter.markAsSummarized();
+            }
+
+            if (!allNewSummaries.isEmpty()) {
+                try {
+                    characterPovSummaryRepository.saveAll(allNewSummaries);
+                    log.info("Saved {} chapter POV summaries.", allNewSummaries.size());
+                } catch (Exception e) {
+                    log.error("Failed to save chapter summaries.", e);
+                    throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to save chapter summaries.");
+                }
+            }
+
+            try {
+                checkAndUpdateBookSummaryStatus(book);
+            } catch (Exception e) {
+                log.error("Failed to update legacy summary flag.", e);
+            }
+
+            bookAnalysisStatusService.refreshStatus(bookId);
+            return allNewSummaries.size();
+        } catch (GeneralException e) {
+            markAnalysisRejectedIfNeeded(book, e);
+            throw e;
         }
-        return allNewSummaries.size();
     }
 
     /**
-     * 여러 관계 JSON 파일을 업로드하고 DB에 저장
-     * 파일 이름 규칙: chapter<번호>_..._event_<번호>.json
+     * ?????온??JSON ???뵬????낆쨮??쀫릭??DB??????
+     * ???뵬 ??已?域뱀뮇?? chapter<甕곕뜇??_..._event_<甕곕뜇??.json
      *
-     * @param bookId 관계 정보를 추가할 책의 ID
-     * @param files  업로드할 관계 정보 JSON 파일 목록
+     * @param bookId ?온???類ｋ궖???곕떽???筌?굞??ID
+     * @param files  ??낆쨮??쀫막 ?온???類ｋ궖 JSON ???뵬 筌뤴뫖以?
      */
     @Transactional
     public int uploadRelationships(Long bookId, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "업로드할 관계 파일이 없습니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "No relationship files provided.");
         }
 
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
-        int totalProcessedCount = 0;
+        try {
+            int totalProcessedCount = 0;
 
-        for (MultipartFile file : files) {
-            if (file == null || file.isEmpty()) {
-                log.warn("빈 관계 파일이 포함되어 스킵합니다.");
-                continue;
-            }
-
-            try {
-                RelationshipUploadDTO dto = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
-                if (dto == null || dto.getChapterIndex() == null) {
-                    throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship payload chapterIndex는 필수입니다.");
+            for (MultipartFile file : files) {
+                if (file == null || file.isEmpty()) {
+                    log.warn("Skip empty relationship file.");
+                    continue;
                 }
-                String eventId = requireText(dto.getEventId(), "relationship.eventId");
-                int chapterIdx = dto.getChapterIndex();
-                int eventIdx = parseEventIdx(eventId, chapterIdx);
 
-                Event event = eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)
-                        .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND,
-                                String.format("이벤트를 찾을 수 없습니다 (책 ID: %d, 챕터: %d, 이벤트: %d)", bookId, chapterIdx, eventIdx)));
+                try {
+                    RelationshipUploadDTO dto = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
+                    if (dto == null || dto.getChapterIndex() == null) {
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship payload chapterIndex is required.");
+                    }
 
-                totalProcessedCount += processNodeWeights(event, book, dto.getNodeWeights());
-                totalProcessedCount += processRelations(event, book, dto.getItems());
+                    String eventId = requireText(dto.getEventId(), "relationship.eventId");
+                    int chapterIdx = dto.getChapterIndex();
+                    int eventIdx = parseEventIdx(eventId, chapterIdx);
 
-            } catch (IOException e) {
-                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "관계 정보 JSON 파일 파싱에 실패했습니다: " + file.getOriginalFilename());
+                    Event event = eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)
+                            .orElseThrow(() -> new GeneralException(
+                                    ErrorStatus.EVENT_NOT_FOUND,
+                                    String.format("Event not found for book=%d chapter=%d event=%d", bookId, chapterIdx, eventIdx)
+                            ));
+
+                    totalProcessedCount += processNodeWeights(event, book, dto.getNodeWeights());
+                    totalProcessedCount += processRelations(event, book, dto.getItems());
+                } catch (IOException e) {
+                    throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship JSON: " + file.getOriginalFilename());
+                }
             }
+
+            bookAnalysisStatusService.refreshStatus(bookId);
+            return totalProcessedCount;
+        } catch (GeneralException e) {
+            markAnalysisRejectedIfNeeded(book, e);
+            throw e;
         }
-        return totalProcessedCount;
     }
 
     /**
-     * JSON의 'node_weights_accum' 부분을 처리하는 헬퍼 메서드
-     * 각 캐릭터의 가중치(weight)를 저장하기 전, 중복 데이터가 있는지 확인
+     * JSON??'node_weights_accum' ?봔?브쑴??筌ｌ꼶???롫뮉 ????筌롫뗄苑??
+     * 揶?筌?Ŧ??怨쀬벥 揶쎛餓λ쵐??weight)?????館釉?묾??? 餓λ쵎???怨쀬뵠?怨? ??덈뮉筌왖 ?類ㅼ뵥
      *
-     * @param event          현재 처리 중인 이벤트 엔터티
-     * @param book           현재 처리 중인 책 엔터티
-     * @param nodeWeightsMap JSON에서 파싱된 캐릭터 ID와 가중치 정보가 담긴 맵
+     * @param event          ?袁⑹삺 筌ｌ꼶??餓λ쵐????源???酉苑??
+     * @param book           ?袁⑹삺 筌ｌ꼶??餓λ쵐??筌??酉苑??
+     * @param nodeWeightsMap JSON?癒?퐣 ???뼓??筌?Ŧ???ID?? 揶쎛餓λ쵐???類ｋ궖揶쎛 ??용┸ 筌?
      */
+    private SummaryItemDTO validateSummaryItem(SummaryItemDTO item) {
+        requireText(item.getCharacterId(), "summary.characterId");
+        requireText(item.getSummary(), "summary.summary");
+        return item;
+    }
+
+    private CharacterPovSummary buildCharacterPovSummary(Chapter chapter, SummaryItemDTO item) {
+        Long characterId = parseCharacterId(item.getCharacterId(), "summary.characterId");
+        Character character = characterRepository.findByBookAndCharacterId(chapter.getBook(), characterId)
+                .orElseThrow(() -> new GeneralException(
+                        ErrorStatus.CHARACTER_NOT_FOUND,
+                        "Character not found with jsonId: " + characterId
+                ));
+
+        return CharacterPovSummary.builder()
+                .book(chapter.getBook())
+                .chapter(chapter)
+                .character(character)
+                .summaryText(requireText(item.getSummary(), "summary.summary"))
+                .build();
+    }
+
     private int processNodeWeights(Event event, Book book, Map<String, NodeWeightDTO> nodeWeightsMap) {
         if (nodeWeightsMap == null || nodeWeightsMap.isEmpty()) {
             return 0;
@@ -432,16 +463,16 @@ public class AdminService {
             Long characterBookId = parseCharacterId(entry.getKey(), "relationship.nodeWeights.characterId");
             NodeWeightDTO weightDTO = entry.getValue();
             if (weightDTO == null) {
-                throw new GeneralException(ErrorStatus._BAD_REQUEST, "nodeWeights payload가 비어 있습니다: " + characterBookId);
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "nodeWeights payload揶쎛 ??쑴堉???됰뮸??덈뼄: " + characterBookId);
             }
 
             Character character = characterRepository.findByBookAndCharacterId(book, characterBookId)
                     .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND,
-                            "해당 책에 등록된 캐릭터를 찾을 수 없습니다: " + characterBookId));
+                            "????筌?굞肉??源낆쨯??筌?Ŧ??怨? 筌≪뼚??????곷뮸??덈뼄: " + characterBookId));
 
             if (statRepository.findByEventAndCharacter(event, character).isPresent()) {
                 throw new GeneralException(ErrorStatus.NODE_WEIGHT_ALREADY_EXISTS,
-                        String.format("해당 이벤트에 대한 '%s' 캐릭터의 가중치 데이터가 이미 존재합니다.", character.getName()));
+                        String.format("??????源?紐꾨퓠 ????'%s' 筌?Ŧ??怨쀬벥 揶쎛餓λ쵐???怨쀬뵠?怨? ??? 鈺곕똻???몃빍??", character.getName()));
             }
 
             EventCharacterStat stat = EventCharacterStat.builder()
@@ -456,27 +487,27 @@ public class AdminService {
         }
 
         if (newStats.isEmpty()) {
-            log.warn("저장할 노드 가중치가 없습니다.");
+            log.warn("???館釉??紐껊굡 揶쎛餓λ쵐?귛첎? ??곷뮸??덈뼄.");
             return 0;
         }
 
         try {
             statRepository.saveAll(newStats);
-            log.info("노드 가중치 {}개 DB 저장 완료", newStats.size());
+            log.info("?紐껊굡 揶쎛餓λ쵐??{}揶?DB ?????袁⑥┷", newStats.size());
         } catch (Exception e) {
-            log.error("노드 가중치 DB 저장 실패", e);
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "노드 가중치 저장 중 데이터베이스 오류가 발생했습니다.");
+            log.error("?紐껊굡 揶쎛餓λ쵐??DB ??????쎈솭", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "?紐껊굡 揶쎛餓λ쵐??????餓??怨쀬뵠?怨뺤퓢??곷뮞 ??살첒揶쎛 獄쏆뮇源??됰뮸??덈뼄.");
         }
         return newStats.size();
     }
 
     /**
-     * JSON의 'relations' 부분을 처리하는 헬퍼 메서드
-     * 인물 관계를 저장하기 전, 중복 데이터가 있는지 확인
+     * JSON??'relations' ?봔?브쑴??筌ｌ꼶???롫뮉 ????筌롫뗄苑??
+     * ?紐꺪??온?④쑬? ???館釉?묾??? 餓λ쵎???怨쀬뵠?怨? ??덈뮉筌왖 ?類ㅼ뵥
      *
-     * @param event        현재 처리 중인 이벤트 엔터티
-     * @param book         현재 처리 중인 책 엔터티
-     * @param relationDTOs JSON에서 파싱된 관계 정보 DTO 목록
+     * @param event        ?袁⑹삺 筌ｌ꼶??餓λ쵐????源???酉苑??
+     * @param book         ?袁⑹삺 筌ｌ꼶??餓λ쵐??筌??酉苑??
+     * @param relationDTOs JSON?癒?퐣 ???뼓???온???類ｋ궖 DTO 筌뤴뫖以?
      */
     private int processRelations(Event event, Book book, List<RelationshipDTO> relationDTOs) {
         if (relationDTOs == null || relationDTOs.isEmpty()) {
@@ -492,20 +523,20 @@ public class AdminService {
                 continue;
             }
             if (dto.getPositivity() == null || dto.getEvidenceCount() == null) {
-                throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship positivity/evidenceCount는 필수입니다.");
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship positivity/evidenceCount???袁⑸땾??낅빍??");
             }
 
             Character fromChar = characterRepository.findByBookAndCharacterId(book, fromCharacterId)
                     .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND,
-                            "해당 책에 등록된 캐릭터를 찾을 수 없습니다: " + fromCharacterId));
+                            "????筌?굞肉??源낆쨯??筌?Ŧ??怨? 筌≪뼚??????곷뮸??덈뼄: " + fromCharacterId));
             Character toChar = characterRepository.findByBookAndCharacterId(book, toCharacterId)
                     .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND,
-                            "해당 책에 등록된 캐릭터를 찾을 수 없습니다: " + toCharacterId));
+                            "????筌?굞肉??源낆쨯??筌?Ŧ??怨? 筌≪뼚??????곷뮸??덈뼄: " + toCharacterId));
 
             if (eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, fromChar, toChar) ||
                     eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, toChar, fromChar)) {
                 throw new GeneralException(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS,
-                        String.format("해당 이벤트에 대한 '%s'와(과) '%s'의 관계 데이터가 이미 존재합니다.", fromChar.getName(), toChar.getName()));
+                        String.format("??????源?紐꾨퓠 ????'%s'??(?? '%s'???온???怨쀬뵠?怨? ??? 鈺곕똻???몃빍??", fromChar.getName(), toChar.getName()));
             }
 
             try {
@@ -520,33 +551,33 @@ public class AdminService {
                 newEdges.add(edge);
             } catch (JsonProcessingException e) {
                 throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR,
-                        String.format("캐릭터 %d와(과) %d의 관계 태그 처리 중 오류가 발생했습니다.", fromCharacterId, toCharacterId));
+                        String.format("筌?Ŧ???%d??(?? %d???온????볥젃 筌ｌ꼶??餓???살첒揶쎛 獄쏆뮇源??됰뮸??덈뼄.", fromCharacterId, toCharacterId));
             }
         }
 
         if (newEdges.isEmpty()) {
-            log.warn("저장할 관계 엣지가 없습니다.");
+            log.warn("???館釉??온???節?揶쎛 ??곷뮸??덈뼄.");
             return 0;
         }
 
         try {
             eventRelationshipEdgeRepository.saveAll(newEdges);
-            log.info("관계 엣지 {}개 DB 저장 완료", newEdges.size());
+            log.info("?온???節? {}揶?DB ?????袁⑥┷", newEdges.size());
         } catch (Exception e) {
-            log.error("관계 엣지 DB 저장 실패", e);
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "관계 데이터 저장 중 데이터베이스 오류가 발생했습니다.");
+            log.error("?온???節? DB ??????쎈솭", e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "?온???怨쀬뵠??????餓??怨쀬뵠?怨뺤퓢??곷뮞 ??살첒揶쎛 獄쏆뮇源??됰뮸??덈뼄.");
         }
         return newEdges.size();
     }
 
     /*
      * =====================================================================================
-     * 2. 데이터 조회
+     * 2. ?怨쀬뵠??鈺곌퀬??
      * =====================================================================================
      */
 
     /**
-     * 전체 요약이 완료되지 않은 책 목록을 조회합니다.
+     * ?袁⑷퍥 ?遺용튋???袁⑥┷??? ??? 筌?筌뤴뫖以??鈺곌퀬???몃빍??
      */
     public List<BookSummaryDTO> getUnsummarizedBooks() {
         List<Book> books = bookRepository.findBySummaryIsFalse().stream()
@@ -568,7 +599,7 @@ public class AdminService {
                         .needsRenormalization(normalizationVersionService.needsRenormalization(book))
                         .normalizedArtifactPath(book.getNormalizedArtifactPath())
                         .isDefault(book.isDefault())
-                        .isFavorite(false) // 관리자 페이지에서는 즐겨찾기 정보가 불필요
+                        .isFavorite(false) // ?온?귐딆쁽 ??륁뵠筌왖?癒?퐣??筌앸Þ爰쇽㎕?섎┛ ?類ｋ궖揶쎛 ?븍뜇釉??
                         .summary(book.isSummary())
                         .updatedAt(book.getUpdatedAt())
                         .build())
@@ -576,7 +607,7 @@ public class AdminService {
     }
 
     /**
-     * POV 요약본이 없는 챕터 목록을 조회합니다.
+     * POV ?遺용튋癰귣챷????용뮉 筌?벤苑?筌뤴뫖以??鈺곌퀬???몃빍??
      */
     public List<UnsummarizedItemDTO> getUnsummarizedChapters() {
         return chapterRepository.findUnsummarizedChapters().stream()
@@ -585,47 +616,47 @@ public class AdminService {
     }
 
     /**
-     * 특정 캐릭터의 프로필 이미지를 재생성합니다.
-     * 이미지 생성에 실패했거나 품질이 좋지 않은 경우 사용합니다.
+     * ?諭??筌?Ŧ??怨쀬벥 ?袁⑥쨮?????筌왖????源?源딅???덈뼄.
+     * ???筌왖 ??밴쉐????쎈솭??뉕탢????됱춳???ル뿭? ??? 野껋럩???????몃빍??
      * 
-     * @param characterId 이미지를 재생성할 캐릭터 ID
+     * @param characterId ???筌왖????源?源딅막 筌?Ŧ???ID
      */
     @Transactional
     public void regenerateCharacterImage(Long characterId) {
-        // 캐릭터 존재 여부 확인
+        // 筌?Ŧ???鈺곕똻????? ?類ㅼ뵥
         Character character = characterRepository.findById(characterId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND, 
-                        "캐릭터를 찾을 수 없습니다: " + characterId));
+                        "筌?Ŧ??怨? 筌≪뼚??????곷뮸??덈뼄: " + characterId));
         
-        log.info("캐릭터 '{}' (ID: {}) 이미지 재생성 시작", character.getName(), characterId);
+        log.info("筌?Ŧ???'{}' (ID: {}) ???筌왖 ??源????뽰삂", character.getName(), characterId);
         
-        // 기존 이미지 상태 로깅
+        // 疫꿸퀣?????筌왖 ?怨밴묶 嚥≪뮄??
         if (character.getProfileImage() != null && !character.getProfileImage().isEmpty()) {
-            log.info("기존 이미지 URL: {}, 상태: {}", 
+            log.info("疫꿸퀣?????筌왖 URL: {}, ?怨밴묶: {}", 
                     character.getProfileImage(), character.getImageGenerationStatus());
         } else {
-            log.info("기존 이미지 없음, 상태: {}", character.getImageGenerationStatus());
+            log.info("疫꿸퀣?????筌왖 ??곸벉, ?怨밴묶: {}", character.getImageGenerationStatus());
         }
         
-        // 이미지 재생성 (비동기가 아닌 동기 방식으로 호출)
+        // ???筌왖 ??源??(??쑬猷욄묾怨? ?袁⑤빒 ??녿┛ 獄쎻뫗???곗쨮 ?紐꾪뀱)
         try {
             characterImageService.generateAndSaveImage(characterId);
-            log.info("캐릭터 '{}' (ID: {}) 이미지 재생성 완료", character.getName(), characterId);
+            log.info("筌?Ŧ???'{}' (ID: {}) ???筌왖 ??源???袁⑥┷", character.getName(), characterId);
         } catch (Exception e) {
-            log.error("캐릭터 '{}' (ID: {}) 이미지 재생성 실패", character.getName(), characterId, e);
+            log.error("筌?Ŧ???'{}' (ID: {}) ???筌왖 ??源????쎈솭", character.getName(), characterId, e);
             throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, 
-                    "이미지 재생성 중 오류가 발생했습니다: " + e.getMessage());
+                    "???筌왖 ??源??餓???살첒揶쎛 獄쏆뮇源??됰뮸??덈뼄: " + e.getMessage());
         }
     }
 
     /*
      * =====================================================================================
-     * 3. 데이터 삭제
+     * 3. ?怨쀬뵠??????
      * =====================================================================================
      */
 
     /**
-     * 특정 책에 속한 모든 등장인물을 삭제합니다.
+     * ?諭??筌?굞肉???곷립 筌뤴뫀諭??源놁삢?紐꺪???????몃빍??
      */
     @Transactional
     public int deleteCharacters(Long bookId) {
@@ -635,11 +666,13 @@ public class AdminService {
         if (!characterRepository.existsByBook(book)) {
             throw new GeneralException(ErrorStatus.NO_CHARACTERS_TO_DELETE);
         }
-        return characterRepository.deleteByBook(book);
+        int deletedCount = characterRepository.deleteByBook(book);
+        bookAnalysisStatusService.resetToNone(bookId);
+        return deletedCount;
     }
 
     /**
-     * 특정 챕터에 속한 모든 이벤트를 삭제합니다.
+     * ?諭??筌?벤苑????곷립 筌뤴뫀諭???源?紐? ?????몃빍??
      */
     @Transactional
     public int deleteEvents(Long bookId, Integer chapterIdx) {
@@ -649,11 +682,13 @@ public class AdminService {
         if (!eventRepository.existsByChapter(chapter)) {
             throw new GeneralException(ErrorStatus.NO_EVENTS_TO_DELETE);
         }
-        return eventRepository.deleteByChapter(chapter);
+        int deletedCount = eventRepository.deleteByChapter(chapter);
+        bookAnalysisStatusService.resetToNone(bookId);
+        return deletedCount;
     }
 
     /**
-     * 특정 챕터의 모든 POV 요약본을 삭제합니다.
+     * ?諭??筌?벤苑??筌뤴뫀諭?POV ?遺용튋癰귣챷???????몃빍??
      */
     @Transactional
     public int deleteChapterSummary(Long bookId, Integer chapterIdx) {
@@ -664,13 +699,13 @@ public class AdminService {
             throw new GeneralException(ErrorStatus.NO_SUMMARY_TO_DELETE);
         }
         int deletedCount = characterPovSummaryRepository.deleteByChapter(chapter);
-        // 챕터의 요약 상태를 '미완료'로 되돌림
         chapter.markPovSummariesAsUncached();
+        bookAnalysisStatusService.resetToNone(bookId);
         return deletedCount;
     }
 
     /**
-     * 특정 이벤트에 연결된 모든 관계 정보를 삭제합니다.
+     * ?諭????源?紐꾨퓠 ?怨뚭퍙??筌뤴뫀諭??온???類ｋ궖???????몃빍??
      */
     @Transactional
     public int deleteRelationships(Long bookId, Integer chapterIdx, Integer eventIdx) {
@@ -680,40 +715,35 @@ public class AdminService {
         Event event = eventRepository.findByChapterAndIdx(chapter, eventIdx)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.EVENT_NOT_FOUND));
 
-        // 삭제할 데이터가 있는지 확인
         boolean edgesExist = eventRelationshipEdgeRepository.existsByEvent(event);
         boolean statsExist = statRepository.existsByEvent(event);
-
         if (!edgesExist && !statsExist) {
-            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE, "해당 이벤트에 삭제할 관계 정보가 없습니다.");
+            throw new GeneralException(ErrorStatus.NO_RELATIONSHIPS_TO_DELETE, "No relationships exist for the event.");
         }
 
         int deletedCount = 0;
-
-        // EventRelationshipEdge 데이터 삭제
         if (edgesExist) {
             deletedCount += eventRelationshipEdgeRepository.deleteByEvent(event);
         }
-
-        // EventCharacterStat 데이터 삭제
         if (statsExist) {
             deletedCount += statRepository.deleteByEvent(event);
         }
 
+        bookAnalysisStatusService.resetToNone(bookId);
         return deletedCount;
     }
 
     /*
      * =====================================================================================
-     * 4. 내부 헬퍼 메서드 및 클래스
+     * 4. ??? ????筌롫뗄苑??獄??????
      * =====================================================================================
      */
 
     /**
-     * 책에 속한 모든 챕터의 요약이 완료되었는지 확인하고, 책의 전체 요약 상태를 업데이트합니다.
+     * 筌?굞肉???곷립 筌뤴뫀諭?筌?벤苑???遺용튋???袁⑥┷??뤿??遺? ?類ㅼ뵥??랁? 筌?굞???袁⑷퍥 ?遺용튋 ?怨밴묶????낅쑓??꾨뱜??몃빍??
      */
     private void checkAndUpdateBookSummaryStatus(Book book) {
-        // 이미 완료된 책은 검사할 필요 없음
+        // ??? ?袁⑥┷??筌?굞? 野꺜??釉??袁⑹뒄 ??곸벉
         if (book.isSummary()) {
             return;
         }
@@ -724,12 +754,23 @@ public class AdminService {
         }
     }
 
+    private void markAnalysisRejectedIfNeeded(Book book, GeneralException exception) {
+        if (book == null || book.isAnalysisReady()) {
+            return;
+        }
+
+        HttpStatus httpStatus = exception.getErrorReasonHttpStatus().getHttpStatus();
+        if (httpStatus != null && httpStatus.is4xxClientError()) {
+            bookAnalysisStatusService.markRejectedIfPending(book.getId());
+        }
+    }
+
     private Integer parseEventIdx(String eventId, Integer chapterIdx) {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^ch(\\d+)-e(\\d+)$").matcher(eventId);
         if (matcher.matches()) {
             Integer eventChapterIdx = Integer.parseInt(matcher.group(1));
             if (!chapterIdx.equals(eventChapterIdx)) {
-                throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventId의 chapterIndex와 업로드 챕터가 일치하지 않습니다.");
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventId??chapterIndex?? ??낆쨮??筌?벤苑ｅ첎? ??깊뒄??? ??녿뮸??덈뼄.");
             }
             return Integer.parseInt(matcher.group(2));
         }
@@ -737,7 +778,7 @@ public class AdminService {
         try {
             return Integer.parseInt(eventId);
         } catch (NumberFormatException e) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventId 형식이 올바르지 않습니다: " + eventId);
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventId ?類ㅻ뻼????而?몴?? ??녿뮸??덈뼄: " + eventId);
         }
     }
 
@@ -787,24 +828,24 @@ public class AdminService {
             return Long.parseLong(matcher.group(1));
         }
 
-        throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + " 형식이 올바르지 않습니다: " + rawValue);
+        throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + " ?類ㅻ뻼????而?몴?? ??녿뮸??덈뼄: " + rawValue);
     }
 
     private void validateEventText(Chapter chapter, int startTxtOffset, int endTxtOffset, String eventText, String eventId) {
         String chapterText = normalizeChapterText(chapter.getRawText());
         if (chapterText == null) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "챕터 원문이 준비되지 않아 eventText를 검증할 수 없습니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "筌?벤苑??癒???餓Β??쑬由븝쭪? ??녿툡 eventText??野꺜筌앹빜釉?????곷뮸??덈뼄.");
         }
 
         int totalCodePoints = chapterText.codePointCount(0, chapterText.length());
         if (startTxtOffset < 0 || endTxtOffset > totalCodePoints) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "이벤트 txtOffset 범위가 챕터 범위를 벗어났습니다: " + eventId);
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "??源??txtOffset 甕곕뗄?욃첎? 筌?벤苑?甕곕뗄?욅몴?甕곗щ선?????덈뼄: " + eventId);
         }
 
         String expected = substringByCodePoints(chapterText, startTxtOffset, endTxtOffset);
         String actual = normalizeChapterText(eventText);
         if (!expected.equals(actual)) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventText와 chapterTxt[start:end]가 일치하지 않습니다: " + eventId);
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "eventText?? chapterTxt[start:end]揶쎛 ??깊뒄??? ??녿뮸??덈뼄: " + eventId);
         }
     }
 
@@ -824,14 +865,14 @@ public class AdminService {
     private String requireText(String value, String fieldName) {
         String normalized = normalizeOptionalText(value);
         if (normalized == null) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + "는 필수입니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + "???袁⑸땾??낅빍??");
         }
         return normalized;
     }
 
     private String requireRawText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + "는 필수입니다.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + "???袁⑸땾??낅빍??");
         }
         return value;
     }
@@ -844,4 +885,3 @@ public class AdminService {
         return normalized.isEmpty() ? null : normalized;
     }
 }
-
