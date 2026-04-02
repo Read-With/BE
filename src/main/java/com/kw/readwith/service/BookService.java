@@ -47,9 +47,7 @@ public class BookService {
                                          Boolean favoriteOnly,
                                          String sortBy,
                                          Long userId) {
-        List<Book> books = userId == null
-                ? bookRepository.findByNormalizationStatusAndIsDefaultTrue(NormalizationStatus.READY)
-                : bookRepository.findAccessibleBooks(userId, NormalizationStatus.READY);
+        List<Book> books = bookRepository.findByNormalizationStatus(NormalizationStatus.READY);
 
         if (keyword != null && !keyword.isBlank()) {
             String lower = keyword.toLowerCase();
@@ -107,10 +105,7 @@ public class BookService {
     }
 
     public BookDetailDTO getBook(Long bookId, Long userId) {
-        Book book = userId == null
-                ? bookRepository.findByIdAndNormalizationStatusAndIsDefaultTrue(bookId, NormalizationStatus.READY)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND))
-                : bookRepository.findAccessibleBook(bookId, userId, NormalizationStatus.READY)
+        Book book = bookRepository.findByIdAndNormalizationStatus(bookId, NormalizationStatus.READY)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         boolean isFavorite = userId != null && favoriteRepository.findByUserId(userId).stream()
@@ -133,8 +128,8 @@ public class BookService {
                 .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
 
         ExtractedEpubMetadata extractedMetadata = epubMetadataExtractorService.extract(epubFile);
-        String resolvedTitle = resolveRequiredMetadata("title", extractedMetadata.title(), title);
-        String resolvedAuthor = resolveRequiredMetadata("author", extractedMetadata.author(), author);
+        String resolvedTitle = resolveRequiredMetadata("title", extractedMetadata.title(), null);
+        String resolvedAuthor = resolveRequiredMetadata("author", extractedMetadata.author(), null);
         String resolvedLanguage = resolveRequiredMetadata("language", extractedMetadata.language(), language);
 
         Book book = Book.builder()
