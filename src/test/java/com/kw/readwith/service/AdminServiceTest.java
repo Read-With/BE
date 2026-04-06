@@ -3,6 +3,7 @@ package com.kw.readwith.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.config.V2TransitionGuard;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
@@ -10,7 +11,18 @@ import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
-import com.kw.readwith.repository.*;
+import com.kw.readwith.repository.BookRepository;
+import com.kw.readwith.repository.CharacterPovSummaryRepository;
+import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.ChapterRepository;
+import com.kw.readwith.repository.EventCharacterStatRepository;
+import com.kw.readwith.repository.EventRelationshipEdgeRepository;
+import com.kw.readwith.repository.EventRepository;
+import com.kw.readwith.service.normalization.NormalizationVersionService;
+import com.kw.readwith.service.normalization.NormalizedArtifactStorageService;
+import com.kw.readwith.util.LocatorSupport;
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,8 +32,8 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -29,8 +41,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -55,205 +67,296 @@ class AdminServiceTest {
     private EventCharacterStatRepository statRepository;
     @Mock
     private CharacterPovSummaryRepository characterPovSummaryRepository;
+    @Mock
+    private CharacterImageService characterImageService;
+    @Mock
+    private BookAnalysisStatusService bookAnalysisStatusService;
+    @Mock
+    private LocatorSupport locatorSupport;
+    @Mock
+    private V2TransitionGuard transitionGuard;
+    @Mock
+    private NormalizationVersionService normalizationVersionService;
+    @Mock
+    private NormalizedArtifactStorageService normalizedArtifactStorageService;
+    @Mock
+    private EntityManager entityManager;
 
     @Spy
     private ObjectMapper objectMapper;
 
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(adminService, "entityManager", entityManager);
+    }
+
     @Test
-    @DisplayName("요약 안된 챕터 조회 시, DTO 리스트를 정확히 반환한다.")
+    @DisplayName("getUnsummarizedChapters returns DTOs from repository chapters")
     void getUnsummarizedChapters() {
-        // given
-        Book mockBook = Book.builder().id(1L).title("테스트 책").build();
-        Chapter mockChapter = Chapter.builder().id(10L).title("테스트 챕터").book(mockBook).build();
-        List<Chapter> mockChapters = List.of(mockChapter);
+        Book book = Book.builder().id(1L).title("Test Book").build();
+        Chapter chapter = Chapter.builder().id(10L).title("Test Chapter").book(book).build();
 
-        given(chapterRepository.findUnsummarizedChapters()).willReturn(mockChapters);
+        given(chapterRepository.findUnsummarizedChapters()).willReturn(List.of(chapter));
 
-        // when
         List<UnsummarizedItemDTO> result = adminService.getUnsummarizedChapters();
 
-        // then
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(10L);
-        assertThat(result.get(0).getName()).isEqualTo("테스트 챕터"); // 실제 필드명 'name' 사용
-        assertThat(result.get(0).getBookTitle()).isEqualTo("테스트 책"); // 실제 필드명 'bookTitle' 사용
+        assertThat(result.get(0).getName()).isEqualTo("Test Chapter");
+        assertThat(result.get(0).getBookTitle()).isEqualTo("Test Book");
         verify(chapterRepository, times(1)).findUnsummarizedChapters();
     }
-    
+
     @Test
-    @DisplayName("인물 정보 업로드 시, 새로운 인물만 정확히 저장된다.")
+    @DisplayName("uploadCharacters saves parsed characters")
     void uploadCharacters_savesNewCharacters() throws IOException {
-        // given
         Long bookId = 1L;
-        String jsonContent = "{\"characters\": [{\"id\": 1, \"common_name\": \"새로운 인물\", \"names\": [\"별명\"], \"main_character\": true, \"description\": \"설명\", \"portrait_prompt\": \"프롬프트\"}]}";
-        MockMultipartFile file = new MockMultipartFile("file", "characters.json", "application/json", jsonContent.getBytes());
+        String jsonContent = """
+                {
+                  "characters": [
+                    {
+                      "id": "1",
+                      "common_name": "Harry Potter",
+                      "names": ["The Boy Who Lived"],
+                      "descriptions": {
+                        "ko": "wizard"
+                      },
+                      "portrait_prompt": "portrait prompt"
+                    }
+                  ]
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "characters.json",
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        Book mockBook = Book.builder().id(bookId).build();
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        // '새로운 인물'은 DB에 없다고 가정
-        given(characterRepository.findByBookAndName(mockBook, "새로운 인물")).willReturn(Optional.empty());
+        Book book = Book.builder().id(bookId).build();
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(characterRepository.findByBookAndCharacterId(book, 1L)).willReturn(Optional.empty());
+        given(characterRepository.saveAll(anyList())).willAnswer(invocation -> invocation.getArgument(0));
 
-        // when
         adminService.uploadCharacters(bookId, file);
 
-        // then
         ArgumentCaptor<List<Character>> captor = ArgumentCaptor.forClass(List.class);
         verify(characterRepository, times(1)).saveAll(captor.capture());
         List<Character> savedCharacters = captor.getValue();
         assertThat(savedCharacters).hasSize(1);
-        assertThat(savedCharacters.get(0).getName()).isEqualTo("새로운 인물");
+        assertThat(savedCharacters.get(0).getName()).isEqualTo("Harry Potter");
     }
 
     @Test
-    @DisplayName("이벤트 정보 업로드 시, 데이터를 정확히 저장한다.")
+    @DisplayName("uploadEvents validates against normalized chapter text and saves events")
     void uploadEvents_savesEvents() throws IOException {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         String fileName = String.format("chapter%d_events.json", chapterIdx);
-        String jsonContent = "[{\"event_id\": 1, \"start\": 0, \"end\": 100, \"text\": \"이벤트 내용\"}]";
-        MockMultipartFile file = new MockMultipartFile("files", fileName, "application/json", jsonContent.getBytes());
+        String jsonContent = """
+                {
+                  "chapterIndex": 1,
+                  "items": [
+                    {
+                      "event_id": "ch1-e1",
+                      "startTxtOffset": 0,
+                      "endTxtOffset": 6,
+                      "eventText": "ABCDEF"
+                    }
+                  ]
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                fileName,
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        Book mockBook = Book.builder().id(bookId).build();
-        Chapter mockChapter = Chapter.builder().id(10L).book(mockBook).build();
+        Book book = Book.builder()
+                .id(bookId)
+                .normalizedArtifactPath("books/1/normalizations/run-1")
+                .build();
+        Chapter chapter = Chapter.builder()
+                .id(10L)
+                .idx(chapterIdx)
+                .book(book)
+                .rawText("preview only")
+                .build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        given(eventRepository.existsByChapter(mockChapter)).willReturn(false);
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(eventRepository.existsByChapter(chapter)).willReturn(false);
+        given(eventRepository.saveAll(anyList())).willAnswer(invocation -> invocation.getArgument(0));
+        given(normalizedArtifactStorageService.loadNormalizedChapterText("books/1/normalizations/run-1", chapterIdx))
+                .willReturn("ABCDEF");
 
-        // when
         adminService.uploadEvents(bookId, List.of(file));
 
-        // then
         ArgumentCaptor<List<Event>> captor = ArgumentCaptor.forClass(List.class);
         verify(eventRepository, times(1)).saveAll(captor.capture());
         List<Event> savedEvents = captor.getValue();
         assertThat(savedEvents).hasSize(1);
         assertThat(savedEvents.get(0).getIdx()).isEqualTo(1);
-        assertThat(savedEvents.get(0).getRawText()).isEqualTo("이벤트 내용");
+        assertThat(savedEvents.get(0).getRawText()).isEqualTo("ABCDEF");
+        verify(normalizedArtifactStorageService, times(1))
+                .loadNormalizedChapterText("books/1/normalizations/run-1", chapterIdx);
     }
 
     @Test
-    @DisplayName("이벤트 정보 업로드 시, 데이터가 이미 존재하면 예외를 발생시킨다.")
+    @DisplayName("uploadEvents rejects a chapter that already has events")
     void uploadEvents_throwsException_whenDataExists() throws IOException {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         String fileName = String.format("chapter%d_events.json", chapterIdx);
-        MockMultipartFile file = new MockMultipartFile("files", fileName, "application/json", "[]".getBytes());
+        String jsonContent = """
+                {
+                  "chapterIndex": 1,
+                  "items": []
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                fileName,
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        Book mockBook = Book.builder().id(bookId).build();
-        Chapter mockChapter = Chapter.builder().id(10L).book(mockBook).build();
+        Book book = Book.builder().id(bookId).normalizedArtifactPath("books/1/normalizations/run-1").build();
+        Chapter chapter = Chapter.builder().id(10L).idx(chapterIdx).book(book).build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        // 데이터가 이미 존재한다고 가정
-        given(eventRepository.existsByChapter(mockChapter)).willReturn(true);
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(eventRepository.existsByChapter(chapter)).willReturn(true);
 
-        // when & then
         GeneralException exception = assertThrows(GeneralException.class, () -> adminService.uploadEvents(bookId, List.of(file)));
+
         assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.EVENT_DATA_ALREADY_EXISTS);
     }
 
     @Test
-    @DisplayName("챕터 요약본 업로드 시, 데이터를 정확히 저장한다.")
+    @DisplayName("uploadChapterSummaries saves summaries and updates chapter state")
     void uploadChapterSummaries_savesSummaries() throws IOException {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         String fileName = String.format("chapter%d_perspective_summaries.json", chapterIdx);
-        String jsonContent = "{\"10\": {\"character_name\": \"인물1\", \"summary\": \"요약 내용\"}}";
-        MockMultipartFile file = new MockMultipartFile("files", fileName, "application/json", jsonContent.getBytes());
+        String jsonContent = """
+                {
+                  "chapterIndex": 1,
+                  "language": "ko",
+                  "items": [
+                    {
+                      "characterId": "10",
+                      "characterName": "character-1",
+                      "summary": "summary text"
+                    }
+                  ]
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                fileName,
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        Book mockBook = Book.builder().id(bookId).build();
-        Chapter mockChapter = Chapter.builder().id(10L).book(mockBook).build();
-        Character mockCharacter = Character.builder().id(1L).build();
+        Book book = Book.builder().id(bookId).build();
+        Chapter chapter = Chapter.builder().id(10L).idx(chapterIdx).book(book).build();
+        Character character = Character.builder().id(1L).build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        given(characterPovSummaryRepository.existsByChapter(mockChapter)).willReturn(false);
-        given(characterRepository.findByBookAndCharacterId(mockBook, 10L)).willReturn(Optional.of(mockCharacter));
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(characterPovSummaryRepository.existsByChapter(chapter)).willReturn(false);
+        given(characterRepository.findByBookAndCharacterId(book, 10L)).willReturn(Optional.of(character));
+        given(chapterRepository.findByBookId(bookId)).willReturn(List.of(chapter));
 
-        // when
         adminService.uploadChapterSummaries(bookId, List.of(file));
 
-        // then
         verify(characterPovSummaryRepository, times(1)).saveAll(anyList());
-        assertThat(mockChapter.isPovSummariesCached()).isTrue();
+        assertThat(chapter.isPovSummariesCached()).isTrue();
     }
 
     @Test
-    @DisplayName("챕터 요약본 업로드 시, 요약본이 이미 존재하면 예외를 발생시킨다.")
+    @DisplayName("uploadChapterSummaries rejects a chapter that is already summarized")
     void uploadChapterSummaries_throwsException_whenSummaryExists() throws IOException {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         String fileName = String.format("chapter%d_perspective_summaries.json", chapterIdx);
-        MockMultipartFile file = new MockMultipartFile("files", fileName, "application/json", "{}".getBytes());
+        String jsonContent = """
+                {
+                  "chapterIndex": 1,
+                  "language": "ko",
+                  "items": []
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                fileName,
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        Book mockBook = Book.builder().id(bookId).build();
-        Chapter mockChapter = Chapter.builder().id(10L).book(mockBook).build();
+        Book book = Book.builder().id(bookId).build();
+        Chapter chapter = Chapter.builder().id(10L).idx(chapterIdx).book(book).build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        // 요약본이 이미 존재한다고 가정
-        given(characterPovSummaryRepository.existsByChapter(mockChapter)).willReturn(true);
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(characterPovSummaryRepository.existsByChapter(chapter)).willReturn(true);
 
-        // when & then
         GeneralException exception = assertThrows(GeneralException.class, () -> adminService.uploadChapterSummaries(bookId, List.of(file)));
+
         assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.CHAPTER_ALREADY_SUMMARIZED);
     }
 
     @Test
-    @DisplayName("관계 정보 파일 업로드 시, DTO 구조에 맞는 JSON을 파싱하여 관계 데이터를 정확히 저장한다.")
+    @DisplayName("uploadRelationships saves node weights and edges from the current payload shape")
     void uploadRelationships_withCorrectJsonStructure() throws IOException {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         int eventIdx = 1;
         String fileName = String.format("chapter%d_something_event_%d.json", chapterIdx, eventIdx);
+        String jsonContent = """
+                {
+                  "chapterIndex": 1,
+                  "eventId": "ch1-e1",
+                  "relations": [
+                    {
+                      "id1": "10",
+                      "id2": "20",
+                      "relation": ["friend"],
+                      "positivity": 0.9,
+                      "count": 5
+                    }
+                  ],
+                  "node_weights_accum": {
+                    "10": {
+                      "weight": 15.5,
+                      "count": 3
+                    }
+                  }
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                fileName,
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        // 실제 DTO 구조와 완벽하게 일치하는 JSON 문자열 생성
-        String jsonContent = "{\n" +
-                "  \"relations\": [\n" +
-                "    {\n" +
-                "      \"id1\": 10,\n" +
-                "      \"id2\": 20,\n" +
-                "      \"relation\": [\"friend\"],\n" +
-                "      \"positivity\": 0.9,\n" +
-                "      \"weight\": 0.8,\n" +
-                "      \"count\": 5\n" +
-                "    }\n" +
-                "  ],\n" +
-                "  \"node_weights_accum\": {\n" +
-                "    \"10\": {\n" +
-                "      \"weight\": 15.5,\n" +
-                "      \"count\": 3\n" +
-                "    }\n" +
-                "  },\n" +
-                "  \"log\": {}\n" +
-                "}";
+        Book book = Book.builder().id(bookId).build();
+        Event event = Event.builder().id(100L).build();
+        Character fromChar = Character.builder().id(10L).name("from").build();
+        Character toChar = Character.builder().id(20L).name("to").build();
 
-        MockMultipartFile mockFile = new MockMultipartFile("files", fileName, "application/json", jsonContent.getBytes(StandardCharsets.UTF_8));
-
-        Book mockBook = Book.builder().id(bookId).build();
-        Event mockEvent = Event.builder().id(100L).build();
-        Character fromChar = Character.builder().id(10L).name("캐릭터1").build();
-        Character toChar = Character.builder().id(20L).name("캐릭터2").build();
-
-        // Mock Repository 설정
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        given(eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)).willReturn(Optional.of(mockEvent));
-        given(characterRepository.findByBookAndCharacterId(mockBook, 10L)).willReturn(Optional.of(fromChar));
-        given(characterRepository.findByBookAndCharacterId(mockBook, 20L)).willReturn(Optional.of(toChar));
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)).willReturn(Optional.of(event));
+        given(characterRepository.findByBookAndCharacterId(book, 10L)).willReturn(Optional.of(fromChar));
+        given(characterRepository.findByBookAndCharacterId(book, 20L)).willReturn(Optional.of(toChar));
         given(statRepository.findByEventAndCharacter(any(), any())).willReturn(Optional.empty());
         given(eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(any(), any(), any())).willReturn(false);
 
-        // when
-        adminService.uploadRelationships(bookId, List.of(mockFile));
+        adminService.uploadRelationships(bookId, List.of(file));
 
-        // then
-        // 1. 가중치(Stat) 저장 검증
         ArgumentCaptor<List<EventCharacterStat>> statCaptor = ArgumentCaptor.forClass(List.class);
         verify(statRepository, times(1)).saveAll(statCaptor.capture());
         List<EventCharacterStat> savedStats = statCaptor.getValue();
@@ -261,7 +364,6 @@ class AdminServiceTest {
         assertThat(savedStats.get(0).getCharacter().getId()).isEqualTo(10L);
         assertThat(savedStats.get(0).getNodeWeight()).isEqualTo(15.5);
 
-        // 2. 관계(Edge) 저장 검증
         ArgumentCaptor<List<EventRelationshipEdge>> edgeCaptor = ArgumentCaptor.forClass(List.class);
         verify(eventRelationshipEdgeRepository, times(1)).saveAll(edgeCaptor.capture());
         List<EventRelationshipEdge> savedEdges = edgeCaptor.getValue();
@@ -273,147 +375,141 @@ class AdminServiceTest {
     }
 
     @Test
-    @DisplayName("관계 정보 업로드 시, 데이터가 이미 존재하면 예외를 발생시킨다.")
+    @DisplayName("uploadRelationships rejects duplicate relationship data")
     void uploadRelationships_throwsException_whenDataExists() throws IOException {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         int eventIdx = 1;
         String fileName = String.format("chapter%d_something_event_%d.json", chapterIdx, eventIdx);
-        // 테스트에 필요한 최소한의 JSON 구조
-        String jsonContent = "{\"relations\": [{\"id1\": 10, \"id2\": 20, \"relation\": [\"friend\"], \"positivity\": 0.9, \"count\": 1}]}";
-        MockMultipartFile mockFile = new MockMultipartFile("files", fileName, "application/json", jsonContent.getBytes(StandardCharsets.UTF_8));
+        String jsonContent = """
+                {
+                  "chapterIndex": 1,
+                  "eventId": "ch1-e1",
+                  "relations": [
+                    {
+                      "id1": "10",
+                      "id2": "20",
+                      "relation": ["friend"],
+                      "positivity": 0.9,
+                      "count": 1
+                    }
+                  ]
+                }
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                fileName,
+                "application/json",
+                jsonContent.getBytes(StandardCharsets.UTF_8)
+        );
 
-        Book mockBook = Book.builder().id(bookId).build();
-        Event mockEvent = Event.builder().id(100L).build();
-        Character fromChar = Character.builder().id(10L).name("캐릭터1").build();
-        Character toChar = Character.builder().id(20L).name("캐릭터2").build();
+        Book book = Book.builder().id(bookId).build();
+        Event event = Event.builder().id(100L).build();
+        Character fromChar = Character.builder().id(10L).name("from").build();
+        Character toChar = Character.builder().id(20L).name("to").build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        given(eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)).willReturn(Optional.of(mockEvent));
-        given(characterRepository.findByBookAndCharacterId(mockBook, 10L)).willReturn(Optional.of(fromChar));
-        given(characterRepository.findByBookAndCharacterId(mockBook, 20L)).willReturn(Optional.of(toChar));
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)).willReturn(Optional.of(event));
+        given(characterRepository.findByBookAndCharacterId(book, 10L)).willReturn(Optional.of(fromChar));
+        given(characterRepository.findByBookAndCharacterId(book, 20L)).willReturn(Optional.of(toChar));
+        given(eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, fromChar, toChar)).willReturn(true);
 
-        // 관계가 이미 존재한다고 가정
-        given(eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(mockEvent, fromChar, toChar)).willReturn(true);
-
-        // when & then
-        GeneralException exception = assertThrows(GeneralException.class, () -> {
-            adminService.uploadRelationships(bookId, List.of(mockFile));
-        });
+        GeneralException exception = assertThrows(GeneralException.class, () -> adminService.uploadRelationships(bookId, List.of(file)));
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS);
     }
 
     @Test
-    @DisplayName("관계 정보 삭제 시, 올바른 Event로 Repository의 deleteByEvent를 호출한다.")
+    @DisplayName("deleteRelationships deletes edge data for an event")
     void deleteRelationships_callsDeleteByEvent() {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
         int eventIdx = 1;
-        Chapter mockChapter = Chapter.builder().id(10L).build();
-        Event mockEvent = Event.builder().id(100L).build();
+        Chapter chapter = Chapter.builder().id(10L).build();
+        Event event = Event.builder().id(100L).build();
 
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        given(eventRepository.findByChapterAndIdx(mockChapter, eventIdx)).willReturn(Optional.of(mockEvent));
-        // 삭제할 데이터가 존재한다고 가정
-        given(eventRelationshipEdgeRepository.existsByEvent(mockEvent)).willReturn(true);
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(eventRepository.findByChapterAndIdx(chapter, eventIdx)).willReturn(Optional.of(event));
+        given(eventRelationshipEdgeRepository.existsByEvent(event)).willReturn(true);
+        given(statRepository.existsByEvent(event)).willReturn(false);
 
-        // when
         adminService.deleteRelationships(bookId, chapterIdx, eventIdx);
 
-        // then
-        ArgumentCaptor<Event> eventCaptor = ArgumentCaptor.forClass(Event.class);
-        verify(eventRelationshipEdgeRepository, times(1)).deleteByEvent(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().getId()).isEqualTo(mockEvent.getId());
+        verify(eventRelationshipEdgeRepository, times(1)).deleteByEvent(event);
     }
 
     @Test
-    @DisplayName("인물 정보 삭제 시, 올바른 Book으로 Repository의 deleteByBook을 호출한다.")
+    @DisplayName("deleteCharacters deletes by book when character data exists")
     void deleteCharacters_callsDeleteByBook() {
-        // given
         Long bookId = 1L;
-        Book mockBook = Book.builder().id(bookId).build();
+        Book book = Book.builder().id(bookId).build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        // 삭제할 데이터가 존재한다고 가정
-        given(characterRepository.existsByBook(mockBook)).willReturn(true);
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(characterRepository.existsByBook(book)).willReturn(true);
 
-        // when
         adminService.deleteCharacters(bookId);
 
-        // then
-        verify(characterRepository, times(1)).deleteByBook(mockBook);
+        verify(characterRepository, times(1)).deleteByBook(book);
     }
 
     @Test
-    @DisplayName("인물 정보 삭제 시, 삭제할 데이터가 없으면 예외를 발생시킨다.")
+    @DisplayName("deleteCharacters rejects when no character data exists")
     void deleteCharacters_throwsException_whenNoData() {
-        // given
         Long bookId = 1L;
-        Book mockBook = Book.builder().id(bookId).build();
+        Book book = Book.builder().id(bookId).build();
 
-        given(bookRepository.findById(bookId)).willReturn(Optional.of(mockBook));
-        // 삭제할 데이터가 없다고 가정
-        given(characterRepository.existsByBook(mockBook)).willReturn(false);
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(characterRepository.existsByBook(book)).willReturn(false);
 
-        // when & then
         GeneralException exception = assertThrows(GeneralException.class, () -> adminService.deleteCharacters(bookId));
+
         assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.NO_CHARACTERS_TO_DELETE);
     }
 
     @Test
-    @DisplayName("이벤트 정보 삭제 시, 올바른 Chapter로 Repository의 deleteByChapter를 호출한다.")
+    @DisplayName("deleteEvents deletes by chapter when event data exists")
     void deleteEvents_callsDeleteByChapter() {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
-        Chapter mockChapter = Chapter.builder().id(10L).build();
+        Chapter chapter = Chapter.builder().id(10L).build();
 
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        given(eventRepository.existsByChapter(mockChapter)).willReturn(true);
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(eventRepository.existsByChapter(chapter)).willReturn(true);
 
-        // when
         adminService.deleteEvents(bookId, chapterIdx);
 
-        // then
-        verify(eventRepository, times(1)).deleteByChapter(mockChapter);
+        verify(eventRepository, times(1)).deleteByChapter(chapter);
     }
 
     @Test
-    @DisplayName("이벤트 정보 삭제 시, 삭제할 데이터가 없으면 예외를 발생시킨다.")
+    @DisplayName("deleteEvents rejects when a chapter has no events")
     void deleteEvents_throwsException_whenNoData() {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
-        Chapter mockChapter = Chapter.builder().id(10L).build();
+        Chapter chapter = Chapter.builder().id(10L).build();
 
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        given(eventRepository.existsByChapter(mockChapter)).willReturn(false);
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(eventRepository.existsByChapter(chapter)).willReturn(false);
 
-        // when & then
         GeneralException exception = assertThrows(GeneralException.class, () -> adminService.deleteEvents(bookId, chapterIdx));
+
         assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.NO_EVENTS_TO_DELETE);
     }
 
     @Test
-    @DisplayName("챕터 요약본 삭제 시, Repository의 deleteByChapter를 호출하고 챕터 상태를 변경한다.")
+    @DisplayName("deleteChapterSummary deletes summaries and resets chapter summary state")
     void deleteChapterSummary_deletesAndUpdatesStatus() {
-        // given
         Long bookId = 1L;
         int chapterIdx = 1;
-        Chapter mockChapter = Chapter.builder().id(10L).build();
-        mockChapter.markAsSummarized(); // 초기 상태: 요약 완료
+        Chapter chapter = Chapter.builder().id(10L).build();
+        chapter.markAsSummarized();
 
-        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(mockChapter));
-        given(characterPovSummaryRepository.existsByChapter(mockChapter)).willReturn(true);
+        given(chapterRepository.findByBookIdAndIdx(bookId, chapterIdx)).willReturn(Optional.of(chapter));
+        given(characterPovSummaryRepository.existsByChapter(chapter)).willReturn(true);
 
-        // when
         adminService.deleteChapterSummary(bookId, chapterIdx);
 
-        // then
-        verify(characterPovSummaryRepository, times(1)).deleteByChapter(mockChapter);
-        assertThat(mockChapter.isPovSummariesCached()).isFalse(); // 상태가 '미완료'로 변경되었는지 확인
+        verify(characterPovSummaryRepository, times(1)).deleteByChapter(chapter);
+        assertThat(chapter.isPovSummariesCached()).isFalse();
     }
 }

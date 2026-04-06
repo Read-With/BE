@@ -39,6 +39,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class NormalizationJobService {
 
+    private static final int CHAPTER_RAW_TEXT_PREVIEW_CODE_POINTS = 2000;
+
     private final BookRepository bookRepository;
     private final ChapterRepository chapterRepository;
     private final ProcessingJobRepository processingJobRepository;
@@ -245,7 +247,7 @@ public class NormalizationJobService {
                             artifact.getTotalCodePoints(),
                             artifact.getStartPos(),
                             artifact.getEndPos(),
-                            artifact.getRawText()
+                            buildRawTextPreview(artifact.getRawText())
                     );
                     return chapter;
                 })
@@ -290,6 +292,20 @@ public class NormalizationJobService {
         } catch (JsonProcessingException e) {
             return "{\"serializationError\":true}";
         }
+    }
+
+    private String buildRawTextPreview(String rawText) {
+        if (rawText == null || rawText.isEmpty()) {
+            return null;
+        }
+
+        int totalCodePoints = rawText.codePointCount(0, rawText.length());
+        if (totalCodePoints <= CHAPTER_RAW_TEXT_PREVIEW_CODE_POINTS) {
+            return rawText;
+        }
+
+        int previewEndIndex = rawText.offsetByCodePoints(0, CHAPTER_RAW_TEXT_PREVIEW_CODE_POINTS);
+        return rawText.substring(0, previewEndIndex);
     }
 
     private TransactionTemplate writableTransaction() {

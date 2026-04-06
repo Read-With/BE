@@ -17,6 +17,7 @@ import com.kw.readwith.dto.admin.*;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.repository.*;
+import com.kw.readwith.service.normalization.NormalizedArtifactStorageService;
 import com.kw.readwith.service.normalization.NormalizationVersionService;
 import com.kw.readwith.util.LocatorSupport;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +61,7 @@ public class AdminService {
     private final LocatorSupport locatorSupport;
     private final V2TransitionGuard transitionGuard;
     private final NormalizationVersionService normalizationVersionService;
+    private final NormalizedArtifactStorageService normalizedArtifactStorageService;
     
     @PersistenceContext
     private EntityManager entityManager;
@@ -176,6 +179,7 @@ public class AdminService {
 
         try {
             List<Event> allNewEvents = new ArrayList<>();
+            Map<Integer, String> chapterTextCache = new HashMap<>();
 
             for (MultipartFile eventFile : eventFiles) {
                 if (eventFile == null || eventFile.isEmpty()) {
@@ -203,6 +207,10 @@ public class AdminService {
                         log.warn("No events found in file {}", eventFile.getOriginalFilename());
                         continue;
                     }
+                    String chapterText = chapterTextCache.computeIfAbsent(
+                            chapterIdx,
+                            idx -> loadNormalizedChapterText(book, idx)
+                    );
 
                     Set<Integer> seenEventIndexes = new LinkedHashSet<>();
                     List<Event> newEventsFromFile = new ArrayList<>();
@@ -222,7 +230,7 @@ public class AdminService {
                         }
 
                         String rawText = requireRawText(dto.getEventText() != null ? dto.getEventText() : dto.getText(), "event.eventText");
-                        validateEventText(chapter, startTxtOffset, endTxtOffset, rawText, eventId);
+                        validateEventText(chapterText, startTxtOffset, endTxtOffset, rawText, eventId);
 
                         Integer eventIdx = parseEventIdx(eventId, chapterIdx);
                         if (!seenEventIndexes.add(eventIdx)) {
@@ -837,8 +845,21 @@ public class AdminService {
         throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + " ?類ㅻ뻼????而?몴?? ??녿뮸??덈뼄: " + rawValue);
     }
 
-    private void validateEventText(Chapter chapter, int startTxtOffset, int endTxtOffset, String eventText, String eventId) {
-        String chapterText = normalizeChapterText(chapter.getRawText());
+    private String loadNormalizedChapterText(Book book, int chapterIdx) {
+        String artifactRoot = book.getNormalizedArtifactPath();
+        if (artifactRoot == null || artifactRoot.isBlank()) {
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Normalized chapter text is not available for validation.");
+        }
+
+        try {
+            return normalizeChapterText(normalizedArtifactStorageService.loadNormalizedChapterText(artifactRoot, chapterIdx));
+        } catch (RuntimeException e) {
+            log.error("Failed to load normalized chapter text. bookId={}, chapterIdx={}", book.getId(), chapterIdx, e);
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to load normalized chapter text for validation.");
+        }
+    }
+
+    private void validateEventText(String chapterText, int startTxtOffset, int endTxtOffset, String eventText, String eventId) {
         if (chapterText == null) {
             throw new GeneralException(ErrorStatus._BAD_REQUEST, "筌?벤苑??癒???餓Β??쑬由븝쭪? ??녿툡 eventText??野꺜筌앹빜釉?????곷뮸??덈뼄.");
         }

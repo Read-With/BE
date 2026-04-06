@@ -3,6 +3,7 @@ package com.kw.readwith.service.normalization;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.config.EpubNormalizationProperties;
 import com.kw.readwith.domain.Book;
+import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.enums.ProcessingJobLogLevel;
 import com.kw.readwith.domain.enums.ProcessingJobStatus;
 import com.kw.readwith.domain.enums.ProcessingPipelineType;
@@ -17,12 +18,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,13 +62,24 @@ public class NormalizationJobServiceTest {
     private final EpubNormalizationProperties epubNormalizationProperties = new EpubNormalizationProperties();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @InjectMocks
     private NormalizationJobService normalizationJobService;
 
     @BeforeEach
     void setUp() {
         epubNormalizationProperties.setRuleVersion("rule-v1");
         epubNormalizationProperties.setLocatorVersion("locator-v2");
+        normalizationJobService = new NormalizationJobService(
+                bookRepository,
+                chapterRepository,
+                processingJobRepository,
+                processingJobLogRepository,
+                normalizationPipelineService,
+                normalizedArtifactStorageService,
+                locatorResolutionService,
+                epubNormalizationProperties,
+                objectMapper,
+                transactionManager
+        );
     }
 
     @Test
@@ -113,5 +125,44 @@ public class NormalizationJobServiceTest {
         assertThat(savedJob.getLocatorVersion()).isEqualTo("locator-v2");
         assertThat(savedLog.getLevel()).isEqualTo(ProcessingJobLogLevel.INFO);
         assertThat(savedLog.getStep()).isEqualTo("queued");
+    }
+
+    @Test
+    @DisplayName("projectChapters stores only a preview in chapter rawText")
+    void projectChaptersStoresRawTextPreview() {
+        Book book = Book.builder()
+                .title("Title")
+                .author("Author")
+                .language("en")
+                .build();
+        ReflectionTestUtils.setField(book, "id", 10L);
+
+        String longRawText = "a".repeat(2500);
+        NormalizedChapterArtifact artifact = NormalizedChapterArtifact.builder()
+                .chapterIndex(1)
+                .title("Chapter 1")
+                .spineHref("chapter-1.xhtml")
+                .paragraphStarts(List.of(0))
+                .paragraphLengths(List.of(longRawText.length()))
+                .totalCodePoints(longRawText.length())
+                .startPos(0)
+                .endPos(longRawText.length() - 1)
+                .rawText(longRawText)
+                .normalizedXhtml("<html/>")
+                .build();
+
+        when(chapterRepository.findByBookId(10L)).thenReturn(List.of());
+        when(locatorResolutionService.writeIntegerList(List.of(0))).thenReturn("[0]");
+        when(locatorResolutionService.writeIntegerList(List.of(longRawText.length()))).thenReturn("[" + longRawText.length() + "]");
+
+        ReflectionTestUtils.invokeMethod(normalizationJobService, "projectChapters", book, List.of(artifact));
+
+        ArgumentCaptor<List<Chapter>> chapterCaptor = ArgumentCaptor.forClass(List.class);
+        verify(chapterRepository).saveAll(chapterCaptor.capture());
+        List<Chapter> savedChapters = chapterCaptor.getValue();
+
+        assertThat(savedChapters).hasSize(1);
+        assertThat(savedChapters.get(0).getRawText()).hasSize(2000);
+        assertThat(savedChapters.get(0).getRawText()).isEqualTo("a".repeat(2000));
     }
 }
