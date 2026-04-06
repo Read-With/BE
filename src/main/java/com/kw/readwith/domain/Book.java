@@ -115,6 +115,10 @@ public class Book extends BaseEntity {
         this.epubPath = epubPath;
     }
 
+    public void updateCoverImage(String coverImgUrl) {
+        this.coverImgUrl = coverImgUrl;
+    }
+
     public void markNormalizationQueued() {
         if (!hasActiveNormalization()) {
             this.normalizationStatus = NormalizationStatus.QUEUED;
