@@ -630,6 +630,24 @@ public class AdminService {
     }
 
     /**
+     * 특정 도서에 속한 캐릭터들의 기본 정보와 이미지 생성 상태를 조회합니다.
+     */
+    public List<CharacterDTO> getCharactersByBookId(Long bookId) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        return characterRepository.findByBook(book).stream()
+                .map(character -> CharacterDTO.builder()
+                        .id(character.getId())
+                        .characterId(String.valueOf(character.getCharacterId()))
+                        .commonName(character.getName())
+                        .profileImage(character.getProfileImage())
+                        .imageGenerationStatus(character.getImageGenerationStatus() != null ? character.getImageGenerationStatus().name() : null)
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    /**
      * ?諭??筌?Ŧ??怨쀬벥 ?袁⑥쨮?????筌왖????源?源딅???덈뼄.
      * ???筌왖 ??밴쉐????쎈솭??뉕탢????됱춳???ル뿭? ??? 野껋럩???????몃빍??
      * 

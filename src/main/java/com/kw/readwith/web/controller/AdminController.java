@@ -4,6 +4,7 @@ import com.kw.readwith.apiPayload.ApiResponse;
 import com.kw.readwith.dto.admin.AnalysisInputResponseDTO;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
+import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.service.AdminService;
 import com.kw.readwith.service.AnalysisInputExportService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,6 +42,14 @@ public class AdminController {
             @Parameter(description = "인물 JSON 파일", required = true) @RequestParam("file") MultipartFile file) {
         adminService.uploadCharacters(bookId, file);
         return ApiResponse.onSuccess("Characters have been successfully uploaded.");
+    }
+
+    @Operation(summary = "도서별 인물 목록 조회", description = "특정 도서에 속한 인물들의 기본 정보와 이미지 생성 상태를 조회합니다.")
+    @GetMapping("/books/{bookId}/characters")
+    public ApiResponse<List<CharacterDTO>> getCharactersByBookId(
+            @Parameter(description = "조회 대상 도서 ID", required = true) @PathVariable Long bookId) {
+        List<CharacterDTO> response = adminService.getCharactersByBookId(bookId);
+        return ApiResponse.onSuccess(response);
     }
 
     @Operation(summary = "인물 전체 삭제", description = "특정 도서에 적재된 인물 정보를 모두 삭제합니다.")
