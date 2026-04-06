@@ -1,7 +1,9 @@
 package com.kw.readwith.dto.bookmark;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.kw.readwith.dto.common.LocatorDTO;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -40,6 +42,7 @@ public class BookmarkResponseDTO {
     private String memo;
 
     @Schema(description = "범위 북마크 여부", example = "true")
+    @Getter(AccessLevel.NONE)
     private boolean isRangeBookmark;
 
     @Schema(description = "생성 시각")
@@ -47,4 +50,9 @@ public class BookmarkResponseDTO {
 
     @Schema(description = "수정 시각")
     private LocalDateTime updatedAt;
+
+    @JsonProperty("isRangeBookmark")
+    public boolean isRangeBookmark() {
+        return isRangeBookmark;
+    }
 }

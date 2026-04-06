@@ -1,6 +1,8 @@
 package com.kw.readwith.dto.book;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -51,9 +53,11 @@ public class BookSummaryDTO {
     private String normalizedArtifactPath;
 
     @Schema(description = "현재 사용자 기준 즐겨찾기 여부")
+    @Getter(AccessLevel.NONE)
     private boolean isFavorite;
 
     @Schema(description = "기본 제공 도서 여부")
+    @Getter(AccessLevel.NONE)
     private boolean isDefault;
 
     @Schema(description = "요약 준비 완료 여부")
@@ -61,4 +65,14 @@ public class BookSummaryDTO {
 
     @Schema(description = "마지막 수정 시각")
     private LocalDateTime updatedAt;
+
+    @JsonProperty("isFavorite")
+    public boolean isFavorite() {
+        return isFavorite;
+    }
+
+    @JsonProperty("isDefault")
+    public boolean isDefault() {
+        return isDefault;
+    }
 }
