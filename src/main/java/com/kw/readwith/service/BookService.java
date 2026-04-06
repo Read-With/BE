@@ -18,6 +18,7 @@ import com.kw.readwith.service.normalization.NormalizationJobService;
 import com.kw.readwith.service.normalization.NormalizedArtifactStorageService;
 import com.kw.readwith.service.normalization.NormalizationVersionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -29,6 +30,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BookService {
@@ -146,6 +148,7 @@ public class BookService {
         String sourceVersion = normalizedArtifactStorageService.newSourceVersion();
         String sourcePath = normalizedArtifactStorageService.storeSourceEpub(savedBook.getId(), sourceVersion, epubFile);
         savedBook.assignUploadedSource(sourcePath);
+        storeCoverImageIfPresent(savedBook, sourceVersion, extractedMetadata);
         savedBook.markNormalizationQueued();
         savedBook.resetAnalysisStatus();
 
@@ -184,6 +187,18 @@ public class BookService {
 
     private String enumName(Enum<?> value) {
         return value == null ? null : value.name();
+    }
+
+    private void storeCoverImageIfPresent(Book book, String sourceVersion, ExtractedEpubMetadata extractedMetadata) {
+        if (extractedMetadata.cover() == null || extractedMetadata.cover().isEmpty()) {
+            return;
+        }
+        try {
+            String coverUrl = normalizedArtifactStorageService.storeBookCover(book.getId(), sourceVersion, extractedMetadata.cover());
+            book.updateCoverImage(coverUrl);
+        } catch (RuntimeException e) {
+            log.warn("Failed to store EPUB cover image. bookId={}, sourceVersion={}", book.getId(), sourceVersion, e);
+        }
     }
 
     private String resolveRequiredMetadata(String fieldName, String extractedValue, String fallbackValue) {

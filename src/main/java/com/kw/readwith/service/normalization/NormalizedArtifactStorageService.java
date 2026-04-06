@@ -64,6 +64,16 @@ public class NormalizedArtifactStorageService {
         );
     }
 
+    public String storeBookCover(Long bookId, String sourceVersion, ExtractedEpubCover cover) {
+        String relativePath = buildCoverRelativePath(bookId, sourceVersion, cover.fileName());
+        amazonS3Manager.uploadBytes(
+                publicKey(relativePath),
+                cover.bytes(),
+                cover.contentType()
+        );
+        return resolvePublicUrl(relativePath);
+    }
+
     public String storeNormalizationArtifacts(Long bookId, String runId, NormalizationPipelineResult result) {
         String artifactRoot = buildArtifactRoot(bookId, runId);
         try {
@@ -112,11 +122,15 @@ public class NormalizedArtifactStorageService {
 
     public String resolveCombinedXhtmlUrl(String artifactRoot) {
         String publicRelativePath = artifactRoot + "/combined.xhtml";
+        return resolvePublicUrl(publicRelativePath);
+    }
+
+    public String resolvePublicUrl(String relativePath) {
         String cloudFrontBaseUrl = trimTrailingSlash(artifactStorageProperties.getCloudFrontBaseUrl());
         if (!cloudFrontBaseUrl.isBlank()) {
-            return cloudFrontBaseUrl + "/" + publicKey(publicRelativePath);
+            return cloudFrontBaseUrl + "/" + publicKey(relativePath);
         }
-        return amazonS3Manager.getObjectUrl(publicKey(publicRelativePath));
+        return amazonS3Manager.getObjectUrl(publicKey(relativePath));
     }
 
     private String buildSourceRelativePath(Long bookId, String sourceVersion) {
@@ -125,6 +139,10 @@ public class NormalizedArtifactStorageService {
 
     private String buildArtifactRoot(Long bookId, String runId) {
         return "books/" + bookId + "/normalizations/" + runId;
+    }
+
+    private String buildCoverRelativePath(Long bookId, String sourceVersion, String fileName) {
+        return "books/" + bookId + "/covers/" + sourceVersion + "/cover" + extractExtension(fileName);
     }
 
     private String buildChapterTextRelativePath(String artifactRoot, int chapterIndex) {
@@ -144,5 +162,16 @@ public class NormalizedArtifactStorageService {
             return "";
         }
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private String extractExtension(String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+        int idx = fileName.lastIndexOf('.');
+        if (idx < 0) {
+            return "";
+        }
+        return fileName.substring(idx);
     }
 }
