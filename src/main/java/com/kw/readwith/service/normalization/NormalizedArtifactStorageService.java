@@ -57,6 +57,13 @@ public class NormalizedArtifactStorageService {
         }
     }
 
+    public String loadNormalizedChapterText(String artifactRoot, int chapterIndex) {
+        return new String(
+                loadPrivateObject(buildChapterTextRelativePath(artifactRoot, chapterIndex)),
+                StandardCharsets.UTF_8
+        );
+    }
+
     public String storeNormalizationArtifacts(Long bookId, String runId, NormalizationPipelineResult result) {
         String artifactRoot = buildArtifactRoot(bookId, runId);
         try {
@@ -86,7 +93,7 @@ public class NormalizedArtifactStorageService {
                         "application/xhtml+xml"
                 );
                 amazonS3Manager.uploadBytes(
-                        privateKey(artifactRoot + "/text/" + chapterFileName + ".txt"),
+                        privateKey(buildChapterTextRelativePath(artifactRoot, chapter.getChapterIndex())),
                         chapter.getRawText().getBytes(StandardCharsets.UTF_8),
                         "text/plain"
                 );
@@ -118,6 +125,10 @@ public class NormalizedArtifactStorageService {
 
     private String buildArtifactRoot(Long bookId, String runId) {
         return "books/" + bookId + "/normalizations/" + runId;
+    }
+
+    private String buildChapterTextRelativePath(String artifactRoot, int chapterIndex) {
+        return artifactRoot + "/text/" + String.format("chapter_%03d.txt", chapterIndex);
     }
 
     private String publicKey(String relativePath) {
