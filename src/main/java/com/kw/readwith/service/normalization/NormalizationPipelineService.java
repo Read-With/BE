@@ -9,9 +9,9 @@ import org.jsoup.nodes.Attribute;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.parser.Parser;
-import org.springframework.stereotype.Service;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.springframework.stereotype.Service;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,10 +35,14 @@ import java.util.zip.ZipFile;
 @RequiredArgsConstructor
 public class NormalizationPipelineService {
 
-    private static final Set<String> BLOCK_TAGS = Set.of("p", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6");
+    private static final int MAX_CANONICAL_CHAPTER_COUNT = 20;
     private static final Set<String> TEXT_MEDIA_TYPES = Set.of("application/xhtml+xml", "text/html");
 
     private final ObjectMapper objectMapper;
+    private final TocTreeBuilder tocTreeBuilder = new TocTreeBuilder();
+    private final SplitUnitExtractor splitUnitExtractor = new SplitUnitExtractor(new SplitUnitClassifier());
+    private final CanonicalChapterPlanner canonicalChapterPlanner = new CanonicalChapterPlanner();
+    private final CanonicalChapterRenderer canonicalChapterRenderer = new CanonicalChapterRenderer();
 
     public NormalizationPipelineResult normalize(
             Path epubFile,
@@ -48,8 +53,8 @@ public class NormalizationPipelineService {
     ) {
         try (ZipFile zipFile = new ZipFile(epubFile.toFile())) {
             String packagePath = resolvePackagePath(zipFile);
-            List<String> spineHrefs = resolveSpineHrefs(zipFile, packagePath);
-            if (spineHrefs.isEmpty()) {
+            PackageDocumentData packageDocument = readPackageDocument(zipFile, packagePath);
+            if (packageDocument.spineHrefs().isEmpty()) {
                 throw failure(
                         NormalizationFailureCode.SPINE_RESOLVE_FAILED,
                         "resolve_spine",
@@ -57,26 +62,10 @@ public class NormalizationPipelineService {
                 );
             }
 
-            List<NormalizedChapterArtifact> chapters = new ArrayList<>();
-            int cumulativeOffset = 0;
-
-            for (String spineHref : spineHrefs) {
-                Document chapterDocument = readXhtml(zipFile, spineHref);
-                sanitize(chapterDocument);
-                NormalizedChapterArtifact artifact = buildChapterArtifact(
-                        chapters.size() + 1,
-                        spineHref,
-                        chapterDocument,
-                        cumulativeOffset
-                );
-                if (artifact == null) {
-                    continue;
-                }
-                chapters.add(artifact);
-                cumulativeOffset += artifact.getTotalCodePoints();
-            }
-
-            if (chapters.isEmpty()) {
+            TocTree tocTree = tocTreeBuilder.build(zipFile, packagePath, packageDocument.manifestById());
+            Map<String, Document> documentsByHref = loadSanitizedDocuments(zipFile, packageDocument.spineHrefs(), tocTree);
+            List<SplitUnit> splitUnits = splitUnitExtractor.extract(tocTree, packageDocument.spineHrefs(), documentsByHref);
+            if (splitUnits.isEmpty()) {
                 throw failure(
                         NormalizationFailureCode.NO_TEXT_CHAPTERS,
                         "extract_chapters",
@@ -84,8 +73,19 @@ public class NormalizationPipelineService {
                 );
             }
 
+            List<CanonicalChapterPlan> chapterPlans = canonicalChapterPlanner.plan(splitUnits);
+            List<NormalizedChapterArtifact> chapters = canonicalChapterRenderer.render(chapterPlans);
+            if (chapters.isEmpty()) {
+                throw failure(
+                        NormalizationFailureCode.NO_TEXT_CHAPTERS,
+                        "plan_chapters",
+                        "No canonical chapters were produced from EPUB."
+                );
+            }
+
+            String combinedXhtml = canonicalChapterRenderer.buildCombinedXhtml(chapters);
             NormalizationMetaDocument metaDocument = buildMetaDocument(bookId, runId, ruleVersion, locatorVersion, chapters);
-            ValidationReport validationReport = buildValidationReport(bookId, runId, ruleVersion, locatorVersion, chapters);
+            ValidationReport validationReport = buildValidationReport(bookId, runId, ruleVersion, locatorVersion, chapters, combinedXhtml);
             if (validationReport.roundTripFailures() > 0) {
                 throw failure(
                         NormalizationFailureCode.VALIDATION_FAILED,
@@ -95,7 +95,7 @@ public class NormalizationPipelineService {
             }
 
             return NormalizationPipelineResult.builder()
-                    .combinedXhtml(buildCombinedXhtml(chapters))
+                    .combinedXhtml(combinedXhtml)
                     .metaJson(writeJson(metaDocument))
                     .validationReportJson(validationReport.reportJson())
                     .chapters(chapters)
@@ -149,7 +149,7 @@ public class NormalizationPipelineService {
         }
     }
 
-    private List<String> resolveSpineHrefs(ZipFile zipFile, String packagePath) throws IOException {
+    private PackageDocumentData readPackageDocument(ZipFile zipFile, String packagePath) throws IOException {
         ZipEntry packageEntry = findEntry(zipFile, packagePath);
         if (packageEntry == null) {
             throw failure(NormalizationFailureCode.PACKAGE_NOT_FOUND, "resolve_package", "EPUB package document is missing.");
@@ -157,30 +157,29 @@ public class NormalizationPipelineService {
 
         try (InputStream inputStream = zipFile.getInputStream(packageEntry)) {
             org.w3c.dom.Document document = newSecureDocumentBuilderFactory().newDocumentBuilder().parse(inputStream);
-            Map<String, ManifestItem> manifest = new LinkedHashMap<>();
             String baseDir = parentPath(packagePath);
 
+            Map<String, EpubManifestItem> manifestById = new LinkedHashMap<>();
             NodeList nodes = document.getElementsByTagName("*");
             for (int i = 0; i < nodes.getLength(); i++) {
                 Node node = nodes.item(i);
-                if (!matchesLocalName(node, "item")) {
+                if (!matchesLocalName(node, "item") || node.getAttributes() == null) {
                     continue;
                 }
+
                 Node idNode = node.getAttributes().getNamedItem("id");
                 Node hrefNode = node.getAttributes().getNamedItem("href");
                 Node mediaTypeNode = node.getAttributes().getNamedItem("media-type");
                 Node propertiesNode = node.getAttributes().getNamedItem("properties");
-                if (idNode == null || hrefNode == null || mediaTypeNode == null) {
+                if (idNode == null || hrefNode == null) {
                     continue;
                 }
 
-                String mediaType = mediaTypeNode.getNodeValue().toLowerCase(Locale.ROOT);
-                if (!TEXT_MEDIA_TYPES.contains(mediaType)) {
-                    continue;
-                }
-
-                manifest.put(idNode.getNodeValue(), new ManifestItem(
-                        resolvePath(baseDir, hrefNode.getNodeValue()),
+                String href = resolvePath(baseDir, hrefNode.getNodeValue());
+                manifestById.put(idNode.getNodeValue(), new EpubManifestItem(
+                        idNode.getNodeValue(),
+                        href,
+                        mediaTypeNode != null ? mediaTypeNode.getNodeValue() : null,
                         propertiesNode != null ? propertiesNode.getNodeValue() : null
                 ));
             }
@@ -188,21 +187,28 @@ public class NormalizationPipelineService {
             List<String> spineHrefs = new ArrayList<>();
             for (int i = 0; i < nodes.getLength(); i++) {
                 Node node = nodes.item(i);
-                if (!matchesLocalName(node, "itemref")) {
+                if (!matchesLocalName(node, "itemref") || node.getAttributes() == null) {
                     continue;
                 }
+
                 Node idRefNode = node.getAttributes().getNamedItem("idref");
                 if (idRefNode == null) {
                     continue;
                 }
 
-                ManifestItem manifestItem = manifest.get(idRefNode.getNodeValue());
-                if (manifestItem != null && !manifestItem.isAuxiliary()) {
-                    spineHrefs.add(manifestItem.href());
+                EpubManifestItem manifestItem = manifestById.get(idRefNode.getNodeValue());
+                if (manifestItem == null || manifestItem.mediaType() == null) {
+                    continue;
                 }
+                String mediaType = manifestItem.mediaType().toLowerCase(Locale.ROOT);
+                if (!TEXT_MEDIA_TYPES.contains(mediaType) || manifestItem.hasProperty("nav")) {
+                    continue;
+                }
+
+                spineHrefs.add(manifestItem.href());
             }
 
-            return spineHrefs;
+            return new PackageDocumentData(manifestById, spineHrefs);
         } catch (NormalizationProcessingException e) {
             throw e;
         } catch (Exception e) {
@@ -213,6 +219,25 @@ public class NormalizationPipelineService {
                     e
             );
         }
+    }
+
+    private Map<String, Document> loadSanitizedDocuments(ZipFile zipFile, List<String> spineHrefs, TocTree tocTree) throws IOException {
+        LinkedHashSet<String> docHrefs = new LinkedHashSet<>(spineHrefs);
+        if (tocTree != null) {
+            for (TocNode leaf : tocTree.leafNodes()) {
+                if (leaf.sourceDocHref() != null && !leaf.sourceDocHref().isBlank()) {
+                    docHrefs.add(leaf.sourceDocHref());
+                }
+            }
+        }
+
+        Map<String, Document> documents = new LinkedHashMap<>();
+        for (String docHref : docHrefs) {
+            Document document = readXhtml(zipFile, docHref);
+            sanitize(document);
+            documents.put(docHref, document);
+        }
+        return documents;
     }
 
     private Document readXhtml(ZipFile zipFile, String entryPath) throws IOException {
@@ -251,109 +276,12 @@ public class NormalizationPipelineService {
         }
     }
 
-    private NormalizedChapterArtifact buildChapterArtifact(
-            int chapterIndex,
-            String spineHref,
-            Document document,
-            int cumulativeOffset
-    ) {
-        Element body = document.body();
-        if (body == null) {
-            return null;
-        }
-
-        List<String> paragraphs = extractParagraphs(body);
-        if (paragraphs.isEmpty()) {
-            return null;
-        }
-
-        List<Integer> paragraphStarts = new ArrayList<>();
-        List<Integer> paragraphLengths = new ArrayList<>();
-        StringBuilder rawTextBuilder = new StringBuilder();
-        int chapterOffset = 0;
-
-        for (String paragraph : paragraphs) {
-            paragraphStarts.add(chapterOffset);
-            int paragraphLength = paragraph.codePointCount(0, paragraph.length());
-            paragraphLengths.add(paragraphLength);
-            rawTextBuilder.append(paragraph);
-            chapterOffset += paragraphLength;
-        }
-
-        String title = resolveChapterTitle(document, chapterIndex);
-        int startPos = cumulativeOffset;
-        int endPos = chapterOffset == 0 ? cumulativeOffset : cumulativeOffset + chapterOffset - 1;
-
-        return NormalizedChapterArtifact.builder()
-                .chapterIndex(chapterIndex)
-                .title(title)
-                .spineHref(spineHref)
-                .paragraphStarts(paragraphStarts)
-                .paragraphLengths(paragraphLengths)
-                .totalCodePoints(chapterOffset)
-                .startPos(startPos)
-                .endPos(endPos)
-                .rawText(rawTextBuilder.toString())
-                .normalizedXhtml(buildChapterXhtml(chapterIndex, title, spineHref, paragraphs))
-                .build();
-    }
-
-    private List<String> extractParagraphs(Element body) {
-        List<String> paragraphs = new ArrayList<>();
-        for (Element candidate : body.select(String.join(",", BLOCK_TAGS))) {
-            String text = normalizeWhitespace(candidate.text());
-            if (!text.isBlank()) {
-                paragraphs.add(text);
-            }
-        }
-        if (paragraphs.isEmpty()) {
-            String bodyText = normalizeWhitespace(body.text());
-            if (!bodyText.isBlank()) {
-                paragraphs.add(bodyText);
-            }
-        }
-        return paragraphs;
-    }
-
-    private String resolveChapterTitle(Document document, int chapterIndex) {
-        for (String selector : List.of("h1", "h2", "title")) {
-            Element element = document.selectFirst(selector);
-            if (element != null) {
-                String text = normalizeWhitespace(element.text());
-                if (!text.isBlank()) {
-                    return text;
-                }
-            }
-        }
-        return "Chapter " + chapterIndex;
-    }
-
-    private String buildChapterXhtml(int chapterIndex, String title, String spineHref, List<String> paragraphs) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("<section data-chapter-index=\"").append(chapterIndex).append("\"");
-        builder.append(" data-spine-href=\"").append(escapeXml(spineHref)).append("\">");
-        builder.append("<h2>").append(escapeXml(title)).append("</h2>");
-        for (int i = 0; i < paragraphs.size(); i++) {
-            builder.append("<p data-block-index=\"").append(i).append("\">")
-                    .append(escapeXml(paragraphs.get(i)))
-                    .append("</p>");
-        }
-        builder.append("</section>");
-        return builder.toString();
-    }
-
-    private String buildCombinedXhtml(List<NormalizedChapterArtifact> chapters) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        builder.append("<html xmlns=\"http://www.w3.org/1999/xhtml\"><head>");
-        builder.append("<meta charset=\"UTF-8\"/>");
-        builder.append("<title>ReadWith Normalized Reader</title>");
-        builder.append("</head><body>");
-        for (NormalizedChapterArtifact chapter : chapters) {
-            builder.append(chapter.getNormalizedXhtml());
-        }
-        builder.append("</body></html>");
-        return builder.toString();
+    private boolean isRemoteReference(String value) {
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return normalized.startsWith("http://")
+                || normalized.startsWith("https://")
+                || normalized.startsWith("//")
+                || normalized.startsWith("data:");
     }
 
     private NormalizationMetaDocument buildMetaDocument(
@@ -397,10 +325,12 @@ public class NormalizationPipelineService {
             String runId,
             String ruleVersion,
             String locatorVersion,
-            List<NormalizedChapterArtifact> chapters
+            List<NormalizedChapterArtifact> chapters,
+            String combinedXhtml
     ) {
         List<Map<String, Object>> chapterReports = new ArrayList<>();
         int roundTripFailures = 0;
+        List<Integer> invalidTitleChapters = new ArrayList<>();
 
         for (NormalizedChapterArtifact chapter : chapters) {
             int chapterFailures = 0;
@@ -413,25 +343,56 @@ public class NormalizationPipelineService {
             }
 
             roundTripFailures += chapterFailures;
+            if (isInvalidCanonicalTitle(chapter.getTitle())) {
+                invalidTitleChapters.add(chapter.getChapterIndex());
+            }
 
             Map<String, Object> chapterReport = new LinkedHashMap<>();
             chapterReport.put("chapterIndex", chapter.getChapterIndex());
+            chapterReport.put("title", chapter.getTitle());
             chapterReport.put("paragraphCount", chapter.getParagraphStarts().size());
             chapterReport.put("totalCodePoints", chapter.getTotalCodePoints());
             chapterReport.put("roundTripFailures", chapterFailures);
             chapterReports.add(chapterReport);
         }
 
+        int combinedSectionCount = countCombinedSections(combinedXhtml);
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("bookId", bookId);
         report.put("runId", runId);
         report.put("ruleVersion", ruleVersion);
         report.put("locatorVersion", locatorVersion);
         report.put("chapterCount", chapters.size());
+        report.put("chapterCountLimit", MAX_CANONICAL_CHAPTER_COUNT);
+        report.put("chapterCountWithinLimit", chapters.size() <= MAX_CANONICAL_CHAPTER_COUNT);
+        report.put("combinedSectionCount", combinedSectionCount);
+        report.put("combinedSectionCountMatchesChapterCount", combinedSectionCount == chapters.size());
+        report.put("invalidTitleChapterIndexes", invalidTitleChapters);
+        report.put("invalidTitleCount", invalidTitleChapters.size());
         report.put("roundTripFailures", roundTripFailures);
         report.put("status", roundTripFailures == 0 ? "PASS" : "FAIL");
         report.put("chapters", chapterReports);
         return new ValidationReport(writeJson(report), roundTripFailures);
+    }
+
+    private boolean isInvalidCanonicalTitle(String title) {
+        if (title == null || title.isBlank()) {
+            return true;
+        }
+        String normalized = title.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+        return normalized.equals("contents")
+                || normalized.startsWith("contents ")
+                || normalized.contains("project gutenberg license")
+                || normalized.equals("index")
+                || normalized.startsWith("index ");
+    }
+
+    private int countCombinedSections(String combinedXhtml) {
+        if (combinedXhtml == null || combinedXhtml.isBlank()) {
+            return 0;
+        }
+        Document document = Jsoup.parse(combinedXhtml, "", Parser.xmlParser());
+        return document.select("section[data-chapter-index]").size();
     }
 
     private String writeJson(Object value) {
@@ -480,18 +441,6 @@ public class NormalizationPipelineService {
         return Path.of(baseDir).resolve(href).normalize().toString().replace("\\", "/");
     }
 
-    private boolean isRemoteReference(String value) {
-        String normalized = value.toLowerCase(Locale.ROOT);
-        return normalized.startsWith("http://")
-                || normalized.startsWith("https://")
-                || normalized.startsWith("//")
-                || normalized.startsWith("data:");
-    }
-
-    private String normalizeWhitespace(String text) {
-        return text == null ? "" : text.replaceAll("\\s+", " ").trim();
-    }
-
     private DocumentBuilderFactory newSecureDocumentBuilderFactory() throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -503,28 +452,14 @@ public class NormalizationPipelineService {
         return factory;
     }
 
-    private String escapeXml(String value) {
-        return value
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&apos;");
-    }
-
     private NormalizationProcessingException failure(NormalizationFailureCode code, String step, String message) {
         return new NormalizationProcessingException(code, step, message);
     }
 
-    private record ManifestItem(String href, String properties) {
-
-        private boolean isAuxiliary() {
-            if (properties == null || properties.isBlank()) {
-                return false;
-            }
-            List<String> tokens = List.of(properties.split("\\s+"));
-            return tokens.contains("nav") || tokens.contains("svg");
-        }
+    private record PackageDocumentData(
+            Map<String, EpubManifestItem> manifestById,
+            List<String> spineHrefs
+    ) {
     }
 
     private record ValidationReport(String reportJson, int roundTripFailures) {
