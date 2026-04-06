@@ -22,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
@@ -48,37 +50,36 @@ public class NormalizationJobService {
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public ProcessingJob createQueuedJob(Book book, String sourceVersion, String triggeredBy) {
-        return writableTransaction().execute(status -> {
-            processingJobRepository.findFirstByBookIdAndPipelineTypeAndStatusInOrderByCreatedAtDesc(
-                            book.getId(),
-                            ProcessingPipelineType.NORMALIZATION,
-                            EnumSet.of(ProcessingJobStatus.QUEUED, ProcessingJobStatus.PROCESSING)
-                    )
-                    .ifPresent(existing -> {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "A normalization job is already active for this book.");
-                    });
+        processingJobRepository.findFirstByBookIdAndPipelineTypeAndStatusInOrderByCreatedAtDesc(
+                        book.getId(),
+                        ProcessingPipelineType.NORMALIZATION,
+                        EnumSet.of(ProcessingJobStatus.QUEUED, ProcessingJobStatus.PROCESSING)
+                )
+                .ifPresent(existing -> {
+                    throw new GeneralException(ErrorStatus._BAD_REQUEST, "A normalization job is already active for this book.");
+                });
 
-            ProcessingJob job = ProcessingJob.builder()
-                    .book(book)
-                    .pipelineType(ProcessingPipelineType.NORMALIZATION)
-                    .runId(normalizedArtifactStorageService.newNormalizationRunId())
-                    .sourceVersion(sourceVersion)
-                    .ruleVersion(epubNormalizationProperties.getRuleVersion())
-                    .locatorVersion(epubNormalizationProperties.getLocatorVersion())
-                    .status(ProcessingJobStatus.QUEUED)
-                    .currentStep("queued")
-                    .triggeredBy(triggeredBy)
-                    .build();
+        ProcessingJob job = ProcessingJob.builder()
+                .book(book)
+                .pipelineType(ProcessingPipelineType.NORMALIZATION)
+                .runId(normalizedArtifactStorageService.newNormalizationRunId())
+                .sourceVersion(sourceVersion)
+                .ruleVersion(epubNormalizationProperties.getRuleVersion())
+                .locatorVersion(epubNormalizationProperties.getLocatorVersion())
+                .status(ProcessingJobStatus.QUEUED)
+                .currentStep("queued")
+                .triggeredBy(triggeredBy)
+                .build();
 
-            ProcessingJob savedJob = processingJobRepository.save(job);
-            writeLog(savedJob, ProcessingJobLogLevel.INFO, "queued", "Normalization job has been queued.", Map.of(
-                    "runId", savedJob.getRunId(),
-                    "ruleVersion", epubNormalizationProperties.getRuleVersion(),
-                    "locatorVersion", epubNormalizationProperties.getLocatorVersion()
-            ));
-            return savedJob;
-        });
+        ProcessingJob savedJob = processingJobRepository.save(job);
+        writeLog(savedJob, ProcessingJobLogLevel.INFO, "queued", "Normalization job has been queued.", Map.of(
+                "runId", savedJob.getRunId(),
+                "ruleVersion", epubNormalizationProperties.getRuleVersion(),
+                "locatorVersion", epubNormalizationProperties.getLocatorVersion()
+        ));
+        return savedJob;
     }
 
     public void execute(Long jobId) {
