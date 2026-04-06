@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.method.HandlerMethod;
 
 import java.lang.reflect.Method;
@@ -13,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class V2ApiContractInterceptorTest {
+public class V2ApiContractInterceptorTest {
 
     private final ApiContractProperties apiContractProperties = new ApiContractProperties();
     private final V2ApiContractInterceptor interceptor = new V2ApiContractInterceptor(apiContractProperties);
@@ -49,6 +50,20 @@ class V2ApiContractInterceptorTest {
 
         assertAllowed("/api/books/1/manifest");
         assertAllowed("/api/progress/1");
+    }
+
+    @Test
+    @DisplayName("dev swagger UI origin??epub upload CORS??허용한다")
+    void allowsDevSwaggerUiOriginForUploadCors() {
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/v2/books");
+        request.addHeader("Origin", "https://dev.readwith.store");
+
+        CorsConfiguration corsConfiguration = securityConfig.corsConfigurationSource().getCorsConfiguration(request);
+
+        assertThat(corsConfiguration).isNotNull();
+        assertThat(corsConfiguration.checkOrigin("https://dev.readwith.store"))
+                .isEqualTo("https://dev.readwith.store");
     }
 
     private void assertBlocked(String requestUri) {

@@ -87,6 +87,7 @@ public class SecurityConfig {
 
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:5173",
+                "https://dev.readwith.store",
                 "https://readwith-frontend.vercel.app",
                 "https://readwith-frontend-*.vercel.app",
                 "https://*.vercel.app"
