@@ -12,6 +12,8 @@ public class NormalizedChapterArtifact {
     private final int chapterIndex;
     private final String title;
     private final String spineHref;
+    private final List<String> sourceDocHrefs;
+    private final List<String> blockSourceDocHrefs;
     private final List<Integer> paragraphStarts;
     private final List<Integer> paragraphLengths;
     private final int totalCodePoints;

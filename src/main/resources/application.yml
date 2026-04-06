@@ -71,7 +71,7 @@ spring:
 epub:
   normalization:
     enabled: ${EPUB_NORMALIZATION_ENABLED:true}
-    rule-version: ${EPUB_NORMALIZATION_RULE_VERSION:v1}
+    rule-version: ${EPUB_NORMALIZATION_RULE_VERSION:v2}
     locator-version: ${EPUB_NORMALIZATION_LOCATOR_VERSION:v2}
 
 artifact:
