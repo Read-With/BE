@@ -1,6 +1,8 @@
 package com.kw.readwith.dto.manifest;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -22,6 +24,7 @@ public class BookManifestDTO {
     private String language;
 
     @Schema(description = "기본 제공 도서 여부")
+    @Getter(AccessLevel.NONE)
     private Boolean isDefault;
 
     @Schema(description = "요약 준비 완료 여부")
@@ -59,4 +62,9 @@ public class BookManifestDTO {
 
     @Schema(description = "정규화 산출물 루트 경로", nullable = true)
     private String normalizedArtifactPath;
+
+    @JsonProperty("isDefault")
+    public Boolean getIsDefault() {
+        return isDefault;
+    }
 }

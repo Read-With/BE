@@ -22,10 +22,12 @@ public class CharacterDTO {
     @Schema(description = "인물 DB 고유 ID (PK)", accessMode = Schema.AccessMode.READ_ONLY)
     private Long id;
 
+    @JsonProperty("characterId")
     @JsonAlias("id")
     @Schema(description = "책 내부 characterId. 숫자 문자열을 사용합니다.", example = "7")
     private String characterId;
 
+    @JsonProperty("commonName")
     @JsonAlias("common_name")
     @Schema(description = "대표 이름", example = "셜록 홈즈")
     private String commonName;
@@ -33,7 +35,8 @@ public class CharacterDTO {
     @Schema(description = "이름/별칭 목록")
     private List<String> names;
 
-    @JsonAlias("main_character")
+    @JsonProperty("isMainCharacter")
+    @JsonAlias({"main_character", "mainCharacter"})
     @Schema(description = "주요 인물 여부")
     private boolean isMainCharacter;
 
@@ -44,6 +47,7 @@ public class CharacterDTO {
     @Schema(description = "legacy 한국어 설명 필드", deprecated = true, nullable = true)
     private String legacyDescriptionKo;
 
+    @JsonProperty("portraitPrompt")
     @JsonAlias("portrait_prompt")
     @Schema(description = "이미지 생성용 프롬프트 또는 프로필 텍스트")
     private String portraitPrompt;

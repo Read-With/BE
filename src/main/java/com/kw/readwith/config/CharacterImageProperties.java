@@ -22,7 +22,7 @@ public class CharacterImageProperties {
     /**
      * DALL-E 프롬프트에 공통적으로 적용할 아트 스타일
      */
-    private String commonStyle;
+    private String baseStylePrompt;
 
     /**
      * S3에 이미지를 저장할 경로 (버킷 내 디렉토리)

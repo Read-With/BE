@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -88,6 +90,11 @@ public class AdminService {
             CharacterListDTO characterListDTO = objectMapper.readValue(file.getInputStream(), CharacterListDTO.class);
             if (characterListDTO == null || characterListDTO.getItems() == null) {
                 throw new GeneralException(ErrorStatus._BAD_REQUEST, "Character payload is invalid.");
+            }
+
+            String bookPrompt = normalizeOptionalText(characterListDTO.getBookPrompt());
+            if (bookPrompt != null) {
+                book.updateBookPrompt(bookPrompt);
             }
 
             if (characterListDTO.getItems().isEmpty()) {
@@ -430,14 +437,6 @@ public class AdminService {
         }
     }
 
-    /**
-     * JSON??'node_weights_accum' ?봔?브쑴??筌ｌ꼶???롫뮉 ????筌롫뗄苑??
-     * 揶?筌?Ŧ??怨쀬벥 揶쎛餓λ쵐??weight)?????館釉?묾??? 餓λ쵎???怨쀬뵠?怨? ??덈뮉筌왖 ?類ㅼ뵥
-     *
-     * @param event          ?袁⑹삺 筌ｌ꼶??餓λ쵐????源???酉苑??
-     * @param book           ?袁⑹삺 筌ｌ꼶??餓λ쵐??筌??酉苑??
-     * @param nodeWeightsMap JSON?癒?퐣 ???뼓??筌?Ŧ???ID?? 揶쎛餓λ쵐???類ｋ궖揶쎛 ??용┸ 筌?
-     */
     private SummaryItemDTO validateSummaryItem(SummaryItemDTO item) {
         requireText(item.getCharacterId(), "summary.characterId");
         requireText(item.getSummary(), "summary.summary");
@@ -798,7 +797,7 @@ public class AdminService {
     }
 
     private Integer parseEventIdx(String eventId, Integer chapterIdx) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^ch(\\d+)-e(\\d+)$").matcher(eventId);
+        Matcher matcher = Pattern.compile("^ch(\\d+)-e(\\d+)$").matcher(eventId);
         if (matcher.matches()) {
             Integer eventChapterIdx = Integer.parseInt(matcher.group(1));
             if (!chapterIdx.equals(eventChapterIdx)) {
@@ -854,7 +853,7 @@ public class AdminService {
             return Long.parseLong(normalized);
         }
 
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^c0*(\\d+)$", java.util.regex.Pattern.CASE_INSENSITIVE)
+        Matcher matcher = Pattern.compile("^c0*(\\d+)$", Pattern.CASE_INSENSITIVE)
                 .matcher(normalized);
         if (matcher.matches()) {
             return Long.parseLong(matcher.group(1));
