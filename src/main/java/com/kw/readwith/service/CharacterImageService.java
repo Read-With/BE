@@ -31,12 +31,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CharacterImageService {
 
-    private static final String BASE_STYLE_PROMPT =
-            "A consistent character profile portrait in a mature storybook editorial illustration style, " +
-            "chest-up bust portrait, centered composition, plain soft background, soft textured brushwork, " +
-            "low-saturation color palette, calm and literary mood, semi-flat illustration, clean silhouette, " +
-            "gentle facial details, natural proportions, not childish, not cartoonish, not anime, " +
-            "not exaggerated, designed as a book character profile image";
+    private static final String DEFAULT_BASE_STYLE_PROMPT =
+            "A single centered chest-up character portrait in a mature editorial gouache illustration style, " +
+            "flat matte gouache rendering, clean silhouette, minimal linework, soft paper texture, plain muted background, " +
+            "low-saturation palette, restrained literary mood, natural facial proportions, not cartoonish, not anime, " +
+            "not painterly, not photorealistic";
 
     private static final String PROFILE_FORMAT_ENFORCEMENT =
             "exactly one character, single centered chest-up bust portrait, one subject filling most of the frame, " +
@@ -189,7 +188,7 @@ public class CharacterImageService {
     private String buildDallePrompt(Character character) {
         StringBuilder prompt = new StringBuilder();
 
-        appendPromptSegment(prompt, BASE_STYLE_PROMPT);
+        appendPromptSegment(prompt, resolveBaseStylePrompt());
         appendPromptSegment(prompt, PROFILE_FORMAT_ENFORCEMENT);
         appendPromptSegment(prompt, sanitizePromptSegment(resolveBookPrompt(character.getBook())));
         appendPromptSegment(prompt, sanitizePromptSegment(resolvePortraitPrompt(character)));
@@ -208,6 +207,11 @@ public class CharacterImageService {
             return portraitPrompt;
         }
         return "single centered chest-up bust portrait of " + character.getName();
+    }
+
+    private String resolveBaseStylePrompt() {
+        String configured = normalizePromptSegment(imageProperties.getBaseStylePrompt());
+        return configured != null ? configured : DEFAULT_BASE_STYLE_PROMPT;
     }
 
     private String sanitizePromptSegment(String value) {

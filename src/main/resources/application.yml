@@ -118,6 +118,7 @@ cloud:
 # 캐릭터 이미지 생성 설정
 character-image:
   fallback-url: https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/default-character.jpg
+  base-style-prompt: ${CHARACTER_IMAGE_BASE_STYLE_PROMPT:A single centered chest-up character portrait in a mature editorial gouache illustration style, flat matte gouache rendering, clean silhouette, minimal linework, soft paper texture, plain muted background, low-saturation palette, restrained literary mood, natural facial proportions, not cartoonish, not anime, not painterly, not photorealistic}
 
   # 극강 통제 프롬프트 (얼굴만 나오도록)
   common-style: "CRITICAL: FACE PORTRAIT ONLY - NO OTHER ELEMENTS ALLOWED
