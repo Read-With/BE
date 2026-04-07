@@ -3,6 +3,7 @@ package com.kw.readwith.dto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.dto.admin.CharacterDTO;
+import com.kw.readwith.dto.admin.CharacterListDTO;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.dto.book.ChapterPovSummaryDTO;
@@ -61,6 +62,27 @@ class BooleanDtoContractTest {
         assertThat(camelCase.isMainCharacter()).isTrue();
         assertThat(snakeCase.isMainCharacter()).isTrue();
         assertThat(plainCamel.isMainCharacter()).isTrue();
+    }
+
+    @Test
+    @DisplayName("character upload root DTO accepts camelCase and snake_case for bookPrompt")
+    void characterListDtoAcceptsBookPromptKeys() throws Exception {
+        CharacterListDTO camelCase = objectMapper.readValue("""
+                {
+                  "bookPrompt": "Victorian urban gothic",
+                  "items": []
+                }
+                """, CharacterListDTO.class);
+
+        CharacterListDTO snakeCase = objectMapper.readValue("""
+                {
+                  "book_prompt": "Victorian urban gothic",
+                  "items": []
+                }
+                """, CharacterListDTO.class);
+
+        assertThat(camelCase.getBookPrompt()).isEqualTo("Victorian urban gothic");
+        assertThat(snakeCase.getBookPrompt()).isEqualTo("Victorian urban gothic");
     }
 
     @Test
