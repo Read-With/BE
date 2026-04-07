@@ -92,9 +92,44 @@ class CharacterImageServiceTest {
         String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", testCharacter);
 
         assertThat(prompt).contains("A consistent character profile portrait in a mature storybook editorial illustration style");
+        assertThat(prompt).contains("exactly one character, single centered chest-up bust portrait");
         assertThat(prompt).contains("Victorian urban gothic, muted sepia and deep green palette");
         assertThat(prompt).contains("middle-aged man, pale complexion, neatly combed dark hair touched with gray");
-        assertThat(prompt).contains("single person only");
+        assertThat(prompt).contains("no split composition");
+        assertThat(prompt.indexOf("A consistent character profile portrait")).isLessThan(prompt.indexOf("Victorian urban gothic"));
+        assertThat(prompt.indexOf("Victorian urban gothic")).isLessThan(prompt.indexOf("middle-aged man"));
+    }
+
+    @Test
+    @DisplayName("buildDallePrompt removes multi-subject and scene-driving prompt segments")
+    void buildDallePrompt_sanitizesRiskyPromptSegments() {
+        Book riskyBook = Book.builder()
+                .id(2L)
+                .title("Risky Book")
+                .author("Author")
+                .language("en")
+                .bookPrompt("Victorian urban gothic, scene with another character, muted sepia palette")
+                .isDefault(false)
+                .build();
+
+        Character riskyCharacter = Character.builder()
+                .id(11L)
+                .book(riskyBook)
+                .characterId(2L)
+                .name("MR. HYDE")
+                .profileText("middle-aged man, duo portrait, formal black suit, crowd behind him")
+                .imageGenerationStatus(ImageGenerationStatus.PENDING)
+                .build();
+
+        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", riskyCharacter);
+
+        assertThat(prompt).contains("Victorian urban gothic");
+        assertThat(prompt).contains("muted sepia palette");
+        assertThat(prompt).contains("middle-aged man");
+        assertThat(prompt).contains("formal black suit");
+        assertThat(prompt).doesNotContain("scene with another character");
+        assertThat(prompt).doesNotContain("duo portrait");
+        assertThat(prompt).doesNotContain("crowd behind him");
     }
 
     @Test

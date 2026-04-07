@@ -22,7 +22,9 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -36,9 +38,38 @@ public class CharacterImageService {
             "gentle facial details, natural proportions, not childish, not cartoonish, not anime, " +
             "not exaggerated, designed as a book character profile image";
 
-    private static final String SINGLE_SUBJECT_ENFORCEMENT =
-            "single person only, exactly one subject, no additional people, no duo, no group, " +
-            "no crowd, no background characters, no interaction scene, no props, no scenery";
+    private static final String PROFILE_FORMAT_ENFORCEMENT =
+            "exactly one character, single centered chest-up bust portrait, one subject filling most of the frame, " +
+            "front-facing or slight three-quarter view, plain soft background, simple profile-card composition";
+
+    private static final String NEGATIVE_LAYOUT_ENFORCEMENT =
+            "no additional people, no duo, no pair, no group, no crowd, no background characters, " +
+            "no split composition, no diptych, no mirrored duplicate, no reflected second face, no twin, " +
+            "no interaction scene, no full body, no wide shot, no props, no scenery, no ornate background";
+
+    private static final List<String> DISALLOWED_PROMPT_SEGMENTS = List.of(
+            "duo portrait",
+            "pair portrait",
+            "group portrait",
+            "double portrait",
+            "multiple people",
+            "multiple characters",
+            "multiple figures",
+            "two people",
+            "two characters",
+            "two figures",
+            "crowd behind",
+            "background characters",
+            "split composition",
+            "diptych",
+            "mirrored second portrait",
+            "mirror image",
+            "reflected second face",
+            "scene with another character",
+            "interaction scene",
+            "standing beside another character",
+            "next to another character"
+    );
 
     private final OpenAiImageModel imageModel;
     private final AmazonS3Manager s3Manager;
@@ -159,9 +190,10 @@ public class CharacterImageService {
         StringBuilder prompt = new StringBuilder();
 
         appendPromptSegment(prompt, BASE_STYLE_PROMPT);
-        appendPromptSegment(prompt, normalizePromptSegment(resolveBookPrompt(character.getBook())));
-        appendPromptSegment(prompt, normalizePromptSegment(resolvePortraitPrompt(character)));
-        appendPromptSegment(prompt, SINGLE_SUBJECT_ENFORCEMENT);
+        appendPromptSegment(prompt, PROFILE_FORMAT_ENFORCEMENT);
+        appendPromptSegment(prompt, sanitizePromptSegment(resolveBookPrompt(character.getBook())));
+        appendPromptSegment(prompt, sanitizePromptSegment(resolvePortraitPrompt(character)));
+        appendPromptSegment(prompt, NEGATIVE_LAYOUT_ENFORCEMENT);
 
         return prompt.toString();
     }
@@ -175,7 +207,31 @@ public class CharacterImageService {
         if (portraitPrompt != null) {
             return portraitPrompt;
         }
-        return "single character portrait of " + character.getName();
+        return "single centered chest-up bust portrait of " + character.getName();
+    }
+
+    private String sanitizePromptSegment(String value) {
+        String normalized = normalizePromptSegment(value);
+        if (normalized == null) {
+            return null;
+        }
+
+        List<String> sanitizedSegments = List.of(normalized.split("\\s*[,;]+\\s*")).stream()
+                .map(this::normalizePromptSegment)
+                .filter(segment -> segment != null && !containsDisallowedPromptSegment(segment))
+                .collect(Collectors.toList());
+
+        if (sanitizedSegments.isEmpty()) {
+            return null;
+        }
+
+        return String.join(", ", sanitizedSegments);
+    }
+
+    private boolean containsDisallowedPromptSegment(String segment) {
+        String lowerSegment = segment.toLowerCase(Locale.ROOT);
+        return DISALLOWED_PROMPT_SEGMENTS.stream()
+                .anyMatch(lowerSegment::contains);
     }
 
     private String normalizePromptSegment(String value) {
