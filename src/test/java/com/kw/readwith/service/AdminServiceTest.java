@@ -113,6 +113,7 @@ class AdminServiceTest {
         Long bookId = 1L;
         String jsonContent = """
                 {
+                  "bookPrompt": "Victorian urban gothic, muted sepia and deep green palette",
                   "characters": [
                     {
                       "id": "1",
@@ -147,6 +148,7 @@ class AdminServiceTest {
         assertThat(savedCharacters).hasSize(1);
         assertThat(savedCharacters.get(0).getName()).isEqualTo("Harry Potter");
         assertThat(savedCharacters.get(0).isMainCharacter()).isTrue();
+        assertThat(book.getBookPrompt()).isEqualTo("Victorian urban gothic, muted sepia and deep green palette");
     }
 
     @Test

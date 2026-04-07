@@ -90,6 +90,11 @@ public class AdminService {
                 throw new GeneralException(ErrorStatus._BAD_REQUEST, "Character payload is invalid.");
             }
 
+            String bookPrompt = normalizeOptionalText(characterListDTO.getBookPrompt());
+            if (bookPrompt != null) {
+                book.updateBookPrompt(bookPrompt);
+            }
+
             if (characterListDTO.getItems().isEmpty()) {
                 log.warn("No characters found in upload payload.");
                 bookAnalysisStatusService.refreshStatus(bookId);

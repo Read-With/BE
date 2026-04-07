@@ -21,60 +21,63 @@ public class Book extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;   // 책 PK
+    private Long id;
 
     @Column(length = 200, nullable = false)
-    private String title;   // 책 목록/리더에 보여줄 제목
+    private String title;
 
     @Column(length = 120, nullable = false)
-    private String author;   // 책 목록/리더에 보여줄 저자
+    private String author;
 
     @Column(length = 10, nullable = false)
-    private String language;   // 검색/표시에 쓰는 언어 코드
+    private String language;
 
     @Column(nullable = false)
-    private boolean isDefault;   // 기본 제공 책인지 구분
+    private boolean isDefault;
 
     @Column(nullable = false)
     @Builder.Default
-    private boolean summary = false;   // 요약 자료 준비 여부(legacy 호환)
+    private boolean summary = false;
 
     @Column(name = "cover_img_url", length = 255)
-    private String coverImgUrl;   // 책 카드 커버 이미지
+    private String coverImgUrl;
 
     @Column(name = "summary_url", length = 255)
-    private String summaryUrl;   // 책 전체 요약 리소스 경로
+    private String summaryUrl;
+
+    @Lob
+    @Column(name = "book_prompt", columnDefinition = "TEXT")
+    private String bookPrompt;
 
     @Column(name = "epub_path", length = 255)
-    private String epubPath;   // 업로드한 원본 EPUB 경로
+    private String epubPath;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "normalization_status", length = 30)
     @Builder.Default
-    private NormalizationStatus normalizationStatus = NormalizationStatus.NONE;   // 본문 읽기 가능 상태
+    private NormalizationStatus normalizationStatus = NormalizationStatus.NONE;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "analysis_status", length = 30)
     @Builder.Default
-    private AnalysisStatus analysisStatus = AnalysisStatus.NONE;   // AI 분석 자료 준비 상태
+    private AnalysisStatus analysisStatus = AnalysisStatus.NONE;
 
     @Column(name = "rule_version", length = 50)
-    private String ruleVersion;   // active 정규화 규칙 버전
+    private String ruleVersion;
 
     @Column(name = "locator_version", length = 50)
-    private String locatorVersion;   // active locator 계산 버전
+    private String locatorVersion;
 
     @Column(name = "normalized_artifact_path", length = 255)
-    private String normalizedArtifactPath;   // active 정규화 산출물 루트 경로
+    private String normalizedArtifactPath;
 
     @Column(name = "normalization_run_id", length = 80)
-    private String normalizationRunId;   // 현재 reader가 보는 active 정규화 run id
+    private String normalizationRunId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_user_id")
-    private User uploadedBy;   // null == 서버 기본 제공
+    private User uploadedBy;
 
-    /* 관계 */
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL)
     @Builder.Default
     private List<Chapter> chapters = new ArrayList<>();
@@ -99,9 +102,6 @@ public class Book extends BaseEntity {
     @Builder.Default
     private List<Bookmark> bookmarks = new ArrayList<>();
 
-    /**
-     * 비즈니스 로직
-     */
     public void updateSummary(String summaryUrl) {
         this.summary = true;
         this.summaryUrl = summaryUrl;
@@ -117,6 +117,10 @@ public class Book extends BaseEntity {
 
     public void updateCoverImage(String coverImgUrl) {
         this.coverImgUrl = coverImgUrl;
+    }
+
+    public void updateBookPrompt(String bookPrompt) {
+        this.bookPrompt = bookPrompt;
     }
 
     public void markNormalizationQueued() {
