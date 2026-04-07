@@ -590,6 +590,15 @@ public class AdminService {
      */
 
     /**
+     * book 테이블의 모든 데이터를 조회합니다. (관리자용)
+     */
+    public List<BookAdminDetailDTO> getAllBooks() {
+        return bookRepository.findAll().stream()
+                .map(BookAdminDetailDTO::from)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * ?袁⑷퍥 ?遺용튋???袁⑥┷??? ??? 筌?筌뤴뫖以??鈺곌퀬???몃빍??
      */
     public List<BookSummaryDTO> getUnsummarizedBooks() {

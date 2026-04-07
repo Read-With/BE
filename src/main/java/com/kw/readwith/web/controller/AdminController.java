@@ -2,6 +2,7 @@ package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
 import com.kw.readwith.dto.admin.AnalysisInputResponseDTO;
+import com.kw.readwith.dto.admin.BookAdminDetailDTO;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.dto.admin.CharacterDTO;
@@ -31,6 +32,13 @@ public class AdminController {
 
     private final AdminService adminService;
     private final AnalysisInputExportService analysisInputExportService;
+
+    @Operation(summary = "모든 도서 전체 정보 조회", description = "book 테이블의 모든 행들의 모든 칼럼값들을 조회합니다. (관리자용)")
+    @GetMapping("/books")
+    public ApiResponse<List<BookAdminDetailDTO>> getAllBooks() {
+        List<BookAdminDetailDTO> response = adminService.getAllBooks();
+        return ApiResponse.onSuccess(response);
+    }
 
     @Operation(
             summary = "인물 업로드",
