@@ -81,23 +81,35 @@ class CharacterImageServiceTest {
                 .build();
 
         when(imageProperties.getFallbackUrl()).thenReturn("https://cdn.readwith.store/character/default.png");
+        when(imageProperties.getBaseStylePrompt()).thenReturn("Configured editorial gouache base style");
         when(imageProperties.getS3Path()).thenReturn("character-images");
         when(imageProperties.getBatchSize()).thenReturn(10);
         when(imageProperties.getDelayBetweenRequestsMs()).thenReturn(0L);
     }
 
     @Test
-    @DisplayName("buildDallePrompt composes base style, bookPrompt, portraitPrompt, and single-subject enforcement")
+    @DisplayName("buildDallePrompt uses configured base style prompt and composes the remaining sections")
     void buildDallePrompt_composesStructuredPrompt() {
         String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", testCharacter);
 
-        assertThat(prompt).contains("A consistent character profile portrait in a mature storybook editorial illustration style");
+        assertThat(prompt).contains("Configured editorial gouache base style");
         assertThat(prompt).contains("exactly one character, single centered chest-up bust portrait");
         assertThat(prompt).contains("Victorian urban gothic, muted sepia and deep green palette");
         assertThat(prompt).contains("middle-aged man, pale complexion, neatly combed dark hair touched with gray");
         assertThat(prompt).contains("no split composition");
-        assertThat(prompt.indexOf("A consistent character profile portrait")).isLessThan(prompt.indexOf("Victorian urban gothic"));
+        assertThat(prompt.indexOf("Configured editorial gouache base style")).isLessThan(prompt.indexOf("Victorian urban gothic"));
         assertThat(prompt.indexOf("Victorian urban gothic")).isLessThan(prompt.indexOf("middle-aged man"));
+    }
+
+    @Test
+    @DisplayName("buildDallePrompt falls back to default base style prompt when configuration is missing")
+    void buildDallePrompt_fallsBackToDefaultBaseStylePrompt() {
+        when(imageProperties.getBaseStylePrompt()).thenReturn(null);
+
+        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", testCharacter);
+
+        assertThat(prompt).contains("A single centered chest-up character portrait in a mature editorial gouache illustration style");
+        assertThat(prompt).contains("flat matte gouache rendering");
     }
 
     @Test
