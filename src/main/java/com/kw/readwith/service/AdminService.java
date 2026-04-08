@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -435,14 +437,6 @@ public class AdminService {
         }
     }
 
-    /**
-     * JSON??'node_weights_accum' ?봔?브쑴??筌ｌ꼶???롫뮉 ????筌롫뗄苑??
-     * 揶?筌?Ŧ??怨쀬벥 揶쎛餓λ쵐??weight)?????館釉?묾??? 餓λ쵎???怨쀬뵠?怨? ??덈뮉筌왖 ?類ㅼ뵥
-     *
-     * @param event          ?袁⑹삺 筌ｌ꼶??餓λ쵐????源???酉苑??
-     * @param book           ?袁⑹삺 筌ｌ꼶??餓λ쵐??筌??酉苑??
-     * @param nodeWeightsMap JSON?癒?퐣 ???뼓??筌?Ŧ???ID?? 揶쎛餓λ쵐???類ｋ궖揶쎛 ??용┸ 筌?
-     */
     private SummaryItemDTO validateSummaryItem(SummaryItemDTO item) {
         requireText(item.getCharacterId(), "summary.characterId");
         requireText(item.getSummary(), "summary.summary");
@@ -596,6 +590,15 @@ public class AdminService {
      */
 
     /**
+     * book 테이블의 모든 데이터를 조회합니다. (관리자용)
+     */
+    public List<BookAdminDetailDTO> getAllBooks() {
+        return bookRepository.findAll().stream()
+                .map(BookAdminDetailDTO::from)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * ?袁⑷퍥 ?遺용튋???袁⑥┷??? ??? 筌?筌뤴뫖以??鈺곌퀬???몃빍??
      */
     public List<BookSummaryDTO> getUnsummarizedBooks() {
@@ -631,6 +634,24 @@ public class AdminService {
     public List<UnsummarizedItemDTO> getUnsummarizedChapters() {
         return chapterRepository.findUnsummarizedChapters().stream()
                 .map(UnsummarizedItemDTO::from)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 특정 도서에 속한 캐릭터들의 기본 정보와 이미지 생성 상태를 조회합니다.
+     */
+    public List<CharacterDTO> getCharactersByBookId(Long bookId) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        return characterRepository.findByBook(book).stream()
+                .map(character -> CharacterDTO.builder()
+                        .id(character.getId())
+                        .characterId(String.valueOf(character.getCharacterId()))
+                        .commonName(character.getName())
+                        .profileImage(character.getProfileImage())
+                        .imageGenerationStatus(character.getImageGenerationStatus() != null ? character.getImageGenerationStatus().name() : null)
+                        .build())
                 .collect(Collectors.toList());
     }
 
@@ -785,7 +806,7 @@ public class AdminService {
     }
 
     private Integer parseEventIdx(String eventId, Integer chapterIdx) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^ch(\\d+)-e(\\d+)$").matcher(eventId);
+        Matcher matcher = Pattern.compile("^ch(\\d+)-e(\\d+)$").matcher(eventId);
         if (matcher.matches()) {
             Integer eventChapterIdx = Integer.parseInt(matcher.group(1));
             if (!chapterIdx.equals(eventChapterIdx)) {
@@ -841,7 +862,7 @@ public class AdminService {
             return Long.parseLong(normalized);
         }
 
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^c0*(\\d+)$", java.util.regex.Pattern.CASE_INSENSITIVE)
+        Matcher matcher = Pattern.compile("^c0*(\\d+)$", Pattern.CASE_INSENSITIVE)
                 .matcher(normalized);
         if (matcher.matches()) {
             return Long.parseLong(matcher.group(1));

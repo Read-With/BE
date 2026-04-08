@@ -2,8 +2,10 @@ package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
 import com.kw.readwith.dto.admin.AnalysisInputResponseDTO;
+import com.kw.readwith.dto.admin.BookAdminDetailDTO;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
+import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.service.AdminService;
 import com.kw.readwith.service.AnalysisInputExportService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +33,13 @@ public class AdminController {
     private final AdminService adminService;
     private final AnalysisInputExportService analysisInputExportService;
 
+    @Operation(summary = "모든 도서 전체 정보 조회", description = "book 테이블의 모든 행들의 모든 칼럼값들을 조회합니다. (관리자용)")
+    @GetMapping("/books")
+    public ApiResponse<List<BookAdminDetailDTO>> getAllBooks() {
+        List<BookAdminDetailDTO> response = adminService.getAllBooks();
+        return ApiResponse.onSuccess(response);
+    }
+
     @Operation(
             summary = "인물 업로드",
             description = "`book_characters.json` 파일을 업로드합니다. payload 루트는 `items`이며, 각 인물은 책 내부 `characterId`를 가져야 합니다."
@@ -41,6 +50,14 @@ public class AdminController {
             @Parameter(description = "인물 JSON 파일", required = true) @RequestParam("file") MultipartFile file) {
         adminService.uploadCharacters(bookId, file);
         return ApiResponse.onSuccess("Characters have been successfully uploaded.");
+    }
+
+    @Operation(summary = "도서별 인물 목록 조회", description = "특정 도서에 속한 인물들의 기본 정보와 이미지 생성 상태를 조회합니다.")
+    @GetMapping("/books/{bookId}/characters")
+    public ApiResponse<List<CharacterDTO>> getCharactersByBookId(
+            @Parameter(description = "조회 대상 도서 ID", required = true) @PathVariable Long bookId) {
+        List<CharacterDTO> response = adminService.getCharactersByBookId(bookId);
+        return ApiResponse.onSuccess(response);
     }
 
     @Operation(summary = "인물 전체 삭제", description = "특정 도서에 적재된 인물 정보를 모두 삭제합니다.")

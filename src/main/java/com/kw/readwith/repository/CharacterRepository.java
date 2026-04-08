@@ -20,6 +20,10 @@ public interface CharacterRepository extends JpaRepository<Character, Long> {
 
     // Book과 name으로 Character를 찾는 메소드
     Optional<Character> findByBookAndName(Book book, String name);
+
+    // 책에 속한 모든 캐릭터 조회
+    List<Character> findByBook(Book book);
+
     /**
      * 특정 책의 모든 인물을 주요 인물 우선, 이름 순으로 조회
      */
