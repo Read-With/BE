@@ -13,6 +13,7 @@ import com.kw.readwith.domain.enums.ProcessingJobStatus;
 import com.kw.readwith.domain.enums.ProcessingPipelineType;
 import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.domain.processing.ProcessingJobLog;
+import com.kw.readwith.dto.admin.NormalizationJobResponseDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.ProcessingJobLogRepository;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import org.springframework.data.domain.PageRequest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +35,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -40,6 +43,7 @@ import java.util.Map;
 public class NormalizationJobService {
 
     private static final int CHAPTER_RAW_TEXT_PREVIEW_CODE_POINTS = 2000;
+    private static final int RECENT_JOBS_LIMIT = 20;
 
     private final BookRepository bookRepository;
     private final ChapterRepository chapterRepository;
@@ -51,6 +55,50 @@ public class NormalizationJobService {
     private final EpubNormalizationProperties epubNormalizationProperties;
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
+
+    @Transactional(readOnly = true)
+    public NormalizationJobResponseDTO getLatestNormalizationJob(Long bookId) {
+        ProcessingJob job = processingJobRepository.findTopByBookIdAndPipelineTypeOrderByCreatedAtDesc(
+                bookId,
+                ProcessingPipelineType.NORMALIZATION
+        ).orElseThrow(() -> new GeneralException(ErrorStatus._BAD_REQUEST, "No normalization job found for this book."));
+
+        return mapToResponseDTO(job);
+    }
+
+    @Transactional(readOnly = true)
+    public List<NormalizationJobResponseDTO> getRecentNormalizationJobs() {
+        List<ProcessingJob> jobs = processingJobRepository.findAllByPipelineTypeOrderByCreatedAtDesc(
+                ProcessingPipelineType.NORMALIZATION,
+                PageRequest.of(0, RECENT_JOBS_LIMIT)
+        );
+
+        return jobs.stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    private NormalizationJobResponseDTO mapToResponseDTO(ProcessingJob job) {
+        return NormalizationJobResponseDTO.builder()
+                .id(job.getId())
+                .bookId(job.getBook().getId())
+                .bookTitle(job.getBook().getTitle())
+                .pipelineType(job.getPipelineType())
+                .runId(job.getRunId())
+                .sourceVersion(job.getSourceVersion())
+                .artifactPath(job.getArtifactPath())
+                .status(job.getStatus())
+                .currentStep(job.getCurrentStep())
+                .failureCode(job.getFailureCode())
+                .failureMessage(job.getFailureMessage())
+                .triggeredBy(job.getTriggeredBy())
+                .ruleVersion(job.getRuleVersion())
+                .locatorVersion(job.getLocatorVersion())
+                .createdAt(job.getCreatedAt())
+                .startedAt(job.getStartedAt())
+                .finishedAt(job.getFinishedAt())
+                .build();
+    }
 
     @Transactional(propagation = Propagation.MANDATORY)
     public ProcessingJob createQueuedJob(Book book, String sourceVersion, String triggeredBy) {
