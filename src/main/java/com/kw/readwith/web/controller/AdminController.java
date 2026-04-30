@@ -7,6 +7,7 @@ import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.NormalizationJobResponseDTO;
+import com.kw.readwith.dto.admin.ProcessingJobLogResponseDTO;
 import com.kw.readwith.service.AdminService;
 import com.kw.readwith.service.AnalysisInputExportService;
 import com.kw.readwith.service.normalization.NormalizationJobService;
@@ -44,9 +45,16 @@ public class AdminController {
     }
 
     @Operation(summary = "최근 정규화 Job 목록 조회", description = "최근에 진행된 정규화 작업 목록을 최신순으로 조회합니다.")
-    @GetMapping("/jobs/normalization/latest")
+    @GetMapping("/normalization/jobs/latest")
     public ApiResponse<List<NormalizationJobResponseDTO>> getRecentNormalizationJobs() {
         List<NormalizationJobResponseDTO> response = normalizationJobService.getRecentNormalizationJobs();
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(summary = "최근 Job Log 목록 조회", description = "시스템 전체에서 기록된 최신 로그 목록을 최신순으로 조회합니다.")
+    @GetMapping("/jobs/logs/latest")
+    public ApiResponse<List<ProcessingJobLogResponseDTO>> getRecentJobLogs() {
+        List<ProcessingJobLogResponseDTO> response = normalizationJobService.getRecentJobLogs();
         return ApiResponse.onSuccess(response);
     }
 

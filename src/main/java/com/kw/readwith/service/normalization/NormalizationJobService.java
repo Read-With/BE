@@ -14,6 +14,7 @@ import com.kw.readwith.domain.enums.ProcessingPipelineType;
 import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.domain.processing.ProcessingJobLog;
 import com.kw.readwith.dto.admin.NormalizationJobResponseDTO;
+import com.kw.readwith.dto.admin.ProcessingJobLogResponseDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.ProcessingJobLogRepository;
@@ -75,6 +76,26 @@ public class NormalizationJobService {
 
         return jobs.stream()
                 .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProcessingJobLogResponseDTO> getRecentJobLogs() {
+        // 시스템 전체의 최근 로그 40건을 최신순으로 가져옴
+        List<ProcessingJobLog> logs = processingJobLogRepository.findAllByOrderByIdDesc(PageRequest.of(0, 40));
+
+        return logs.stream()
+                .map(log -> ProcessingJobLogResponseDTO.builder()
+                        .id(log.getId())
+                        .jobId(log.getJob().getId())
+                        .bookTitle(log.getJob().getBook().getTitle())
+                        .seq(log.getSeq())
+                        .level(log.getLevel())
+                        .step(log.getStep())
+                        .message(log.getMessage())
+                        .payloadJson(log.getPayloadJson())
+                        .createdAt(log.getCreatedAt())
+                        .build())
                 .collect(Collectors.toList());
     }
 
