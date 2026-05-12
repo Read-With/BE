@@ -165,4 +165,101 @@ public class NormalizationJobServiceTest {
         assertThat(savedChapters.get(0).getRawText()).hasSize(2000);
         assertThat(savedChapters.get(0).getRawText()).isEqualTo("a".repeat(2000));
     }
+
+    @Test
+    @DisplayName("getLatestNormalizationJob returns the latest job")
+    void getLatestNormalizationJobReturnsLatestJob() {
+        Long bookId = 10L;
+        Book book = Book.builder().title("Book Title").build();
+        ReflectionTestUtils.setField(book, "id", bookId);
+
+        ProcessingJob job = ProcessingJob.builder()
+                .id(100L)
+                .book(book)
+                .pipelineType(ProcessingPipelineType.NORMALIZATION)
+                .runId("run-123")
+                .sourceVersion("src-v2")
+                .artifactPath("path/to/artifact")
+                .status(ProcessingJobStatus.READY)
+                .currentStep("completed")
+                .triggeredBy("UPLOAD")
+                .ruleVersion("v2")
+                .locatorVersion("v2")
+                .build();
+        ReflectionTestUtils.setField(job, "createdAt", java.time.LocalDateTime.now());
+
+        when(processingJobRepository.findTopByBookIdAndPipelineTypeOrderByCreatedAtDesc(
+                bookId, ProcessingPipelineType.NORMALIZATION
+        )).thenReturn(Optional.of(job));
+
+        var response = normalizationJobService.getLatestNormalizationJob(bookId);
+
+        assertThat(response.getId()).isEqualTo(100L);
+        assertThat(response.getBookId()).isEqualTo(bookId);
+        assertThat(response.getBookTitle()).isEqualTo("Book Title");
+        assertThat(response.getPipelineType()).isEqualTo(ProcessingPipelineType.NORMALIZATION);
+        assertThat(response.getSourceVersion()).isEqualTo("src-v1");
+        assertThat(response.getArtifactPath()).isEqualTo("path/to/artifact");
+        assertThat(response.getStatus()).isEqualTo(ProcessingJobStatus.READY);
+        assertThat(response.getCurrentStep()).isEqualTo("completed");
+    }
+
+    @Test
+    @DisplayName("getRecentNormalizationJobs returns list of jobs")
+    void getRecentNormalizationJobsReturnsList() {
+        Book book = Book.builder().title("Book Title").build();
+        ReflectionTestUtils.setField(book, "id", 10L);
+
+        ProcessingJob job = ProcessingJob.builder()
+                .id(100L)
+                .book(book)
+                .pipelineType(ProcessingPipelineType.NORMALIZATION)
+                .runId("run-123")
+                .sourceVersion("src-v2")
+                .artifactPath("path/v2")
+                .status(ProcessingJobStatus.READY)
+                .currentStep("completed")
+                .build();
+        ReflectionTestUtils.setField(job, "createdAt", java.time.LocalDateTime.now());
+
+        when(processingJobRepository.findAllByPipelineTypeOrderByCreatedAtDesc(
+                any(), any()
+        )).thenReturn(List.of(job));
+
+        var response = normalizationJobService.getRecentNormalizationJobs();
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).getId()).isEqualTo(100L);
+        assertThat(response.get(0).getBookTitle()).isEqualTo("Book Title");
+        assertThat(response.get(0).getPipelineType()).isEqualTo(ProcessingPipelineType.NORMALIZATION);
+        assertThat(response.get(0).getSourceVersion()).isEqualTo("src-v2");
+        assertThat(response.get(0).getArtifactPath()).isEqualTo("path/v2");
+    }
+
+    @Test
+    @DisplayName("getRecentJobLogs returns list of recent logs system-wide")
+    void getRecentJobLogsReturnsList() {
+        Book book = Book.builder().title("Book Title").build();
+        ProcessingJob job = ProcessingJob.builder().id(100L).book(book).build();
+        
+        ProcessingJobLog logEntry = ProcessingJobLog.builder()
+                .id(500L)
+                .job(job)
+                .seq(1)
+                .level(ProcessingJobLogLevel.INFO)
+                .step("test_step")
+                .message("test message")
+                .build();
+        ReflectionTestUtils.setField(logEntry, "createdAt", java.time.LocalDateTime.now());
+
+        when(processingJobLogRepository.findAllByOrderByIdDesc(any())).thenReturn(List.of(logEntry));
+
+        var response = normalizationJobService.getRecentJobLogs();
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).getId()).isEqualTo(500L);
+        assertThat(response.get(0).getJobId()).isEqualTo(100L);
+        assertThat(response.get(0).getBookTitle()).isEqualTo("Book Title");
+        assertThat(response.get(0).getMessage()).isEqualTo("test message");
+    }
 }
