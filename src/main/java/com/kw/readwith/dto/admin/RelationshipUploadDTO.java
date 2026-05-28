@@ -13,6 +13,9 @@ import java.util.Map;
 @Schema(description = "관계 업로드 payload 루트")
 public class RelationshipUploadDTO {
 
+    @Schema(description = "relationship delta contract version", example = "relationship-delta-v1")
+    private String contractVersion;
+
     @Schema(description = "파일이 담당하는 챕터 인덱스(1-based)", example = "3")
     private Integer chapterIndex;
 

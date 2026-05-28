@@ -31,4 +31,10 @@ public interface EventRelationshipEdgeRepository extends JpaRepository<EventRela
      */
     List<EventRelationshipEdge> findByEventIn(List<Event> events);
 
+    @Query("SELECT edge FROM EventRelationshipEdge edge " +
+           "JOIN edge.event event JOIN event.chapter chapter " +
+           "WHERE event IN :events " +
+           "ORDER BY chapter.idx ASC, event.idx ASC, edge.id ASC")
+    List<EventRelationshipEdge> findByEventsOrdered(@Param("events") List<Event> events);
+
 }

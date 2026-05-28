@@ -30,4 +30,7 @@ public class RelationshipDTO {
     @JsonAlias("count")
     @Schema(description = "근거 개수 또는 상호작용 횟수", example = "3")
     private Integer evidenceCount;
+
+    @Schema(description = "현재 이벤트에서 관계 변화가 발생했다고 판단한 근거")
+    private String reason;
 }
