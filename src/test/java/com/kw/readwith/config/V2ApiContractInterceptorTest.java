@@ -57,13 +57,13 @@ public class V2ApiContractInterceptorTest {
     void allowsDevSwaggerUiOriginForUploadCors() {
         SecurityConfig securityConfig = new SecurityConfig(null, null, null);
         MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/v2/books");
-        request.addHeader("Origin", "https://dev.readwith.store");
+        request.addHeader("Origin", "https://dev.readwith.cloud");
 
         CorsConfiguration corsConfiguration = securityConfig.corsConfigurationSource().getCorsConfiguration(request);
 
         assertThat(corsConfiguration).isNotNull();
-        assertThat(corsConfiguration.checkOrigin("https://dev.readwith.store"))
-                .isEqualTo("https://dev.readwith.store");
+        assertThat(corsConfiguration.checkOrigin("https://dev.readwith.cloud"))
+                .isEqualTo("https://dev.readwith.cloud");
     }
 
     private void assertBlocked(String requestUri) {
