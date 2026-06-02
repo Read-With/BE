@@ -1,6 +1,8 @@
 package com.kw.readwith.web.controller;
 
 import com.kw.readwith.apiPayload.ApiResponse;
+import com.kw.readwith.apiPayload.code.status.ErrorStatus;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.admin.AnalysisInputResponseDTO;
 import com.kw.readwith.dto.admin.BookAdminDetailDTO;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
@@ -109,14 +111,25 @@ public class AdminController {
 
     @Operation(
             summary = "관계 업로드",
-            description = "`chapter_{n}_relationships_event_{m}.json` 파일들을 업로드합니다. payload 루트는 `chapterIndex`, `eventId`, `items`, `nodeWeights`를 사용합니다."
+            description = "비활성화된 legacy endpoint입니다. `/books/{bookId}/relationship-deltas`를 사용합니다."
     )
     @PostMapping(value = "/books/{bookId}/relationships", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> uploadRelationships(
             @Parameter(description = "업로드 대상 도서 ID", required = true) @PathVariable Long bookId,
             @Parameter(description = "관계 JSON 파일 목록", required = true) @RequestParam("files") List<MultipartFile> files) {
-        adminService.uploadRelationships(bookId, files);
-        return ApiResponse.onSuccess("Relationships for the book have been successfully uploaded.");
+        throw new GeneralException(ErrorStatus.RELATIONSHIP_LEGACY_API_DISABLED);
+    }
+
+    @Operation(
+            summary = "관계 delta 업로드",
+            description = "`relationship-delta-v1` 파일들을 event 단위 replace 방식으로 업로드합니다."
+    )
+    @PostMapping(value = "/books/{bookId}/relationship-deltas", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> uploadRelationshipDeltas(
+            @Parameter(description = "업로드 대상 도서 ID", required = true) @PathVariable Long bookId,
+            @Parameter(description = "관계 delta JSON 파일 목록", required = true) @RequestParam("files") List<MultipartFile> files) {
+        adminService.uploadRelationshipDeltas(bookId, files);
+        return ApiResponse.onSuccess("Relationship deltas for the book have been successfully uploaded.");
     }
 
     @Operation(summary = "이벤트 관계 삭제", description = "특정 이벤트에 적재된 관계 edge와 node weight를 함께 삭제합니다.")

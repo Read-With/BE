@@ -33,6 +33,7 @@ import jakarta.persistence.PersistenceContext;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
 public class AdminService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminService.class);
+    private static final String RELATIONSHIP_DELTA_CONTRACT_VERSION = "relationship-delta-v1";
 
     // 筌뤴뫀諭??온?귐딆쁽 疫꿸퀡????袁⑹뒄??Repository 獄?ObjectMapper ??뤵??雅뚯눘??
     private final BookRepository bookRepository;
@@ -390,27 +392,34 @@ public class AdminService {
      */
     @Transactional
     public int uploadRelationships(Long bookId, List<MultipartFile> files) {
+        return uploadRelationshipDeltas(bookId, files);
+    }
+
+    @Transactional
+    public int uploadRelationshipDeltas(Long bookId, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
-            throw new GeneralException(ErrorStatus._BAD_REQUEST, "No relationship files provided.");
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "No relationship delta files provided.");
         }
 
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
 
         try {
+            Map<String, RelationshipDeltaCandidate> candidatesByEventId = new LinkedHashMap<>();
             int totalProcessedCount = 0;
 
             for (MultipartFile file : files) {
                 if (file == null || file.isEmpty()) {
-                    log.warn("Skip empty relationship file.");
+                    log.warn("Skip empty relationship delta file.");
                     continue;
                 }
 
                 try {
                     RelationshipUploadDTO dto = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
                     if (dto == null || dto.getChapterIndex() == null) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship payload chapterIndex is required.");
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship delta payload chapterIndex is required.");
                     }
+                    validateRelationshipDeltaContract(dto);
 
                     String eventId = requireText(dto.getEventId(), "relationship.eventId");
                     int chapterIdx = dto.getChapterIndex();
@@ -422,11 +431,21 @@ public class AdminService {
                                     String.format("Event not found for book=%d chapter=%d event=%d", bookId, chapterIdx, eventIdx)
                             ));
 
-                    totalProcessedCount += processNodeWeights(event, book, dto.getNodeWeights());
-                    totalProcessedCount += processRelations(event, book, dto.getItems());
+                    String normalizedEventId = normalizeEventId(eventId, chapterIdx, eventIdx);
+                    if (candidatesByEventId.containsKey(normalizedEventId)) {
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "Duplicate relationship delta eventId in request: " + normalizedEventId);
+                    }
+
+                    RelationshipDeltaCandidate candidate = buildRelationshipDeltaCandidate(event, book, dto);
+                    candidatesByEventId.put(normalizedEventId, candidate);
                 } catch (IOException e) {
-                    throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship JSON: " + file.getOriginalFilename());
+                    throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship delta JSON: " + file.getOriginalFilename());
                 }
+            }
+
+            for (RelationshipDeltaCandidate candidate : candidatesByEventId.values()) {
+                replaceRelationshipDelta(candidate.event());
+                totalProcessedCount += saveRelationshipDelta(candidate);
             }
 
             bookAnalysisStatusService.refreshStatus(bookId);
@@ -435,6 +454,138 @@ public class AdminService {
             markAnalysisRejectedIfNeeded(book, e);
             throw e;
         }
+    }
+
+    private void validateRelationshipDeltaContract(RelationshipUploadDTO dto) {
+        String contractVersion = requireText(dto.getContractVersion(), "relationship.contractVersion");
+        if (!RELATIONSHIP_DELTA_CONTRACT_VERSION.equals(contractVersion)) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Unsupported relationship contractVersion: " + contractVersion);
+        }
+    }
+
+    private RelationshipDeltaCandidate buildRelationshipDeltaCandidate(Event event, Book book, RelationshipUploadDTO dto) {
+        List<EventCharacterStat> stats = buildRelationshipNodeWeights(event, book, dto.getNodeWeights());
+        List<EventRelationshipEdge> edges = buildRelationshipDeltaEdges(event, book, dto.getItems());
+        return new RelationshipDeltaCandidate(event, stats, edges);
+    }
+
+    private List<EventCharacterStat> buildRelationshipNodeWeights(Event event, Book book, Map<String, NodeWeightDTO> nodeWeightsMap) {
+        if (nodeWeightsMap == null || nodeWeightsMap.isEmpty()) {
+            return List.of();
+        }
+
+        List<EventCharacterStat> stats = new ArrayList<>();
+        for (Map.Entry<String, NodeWeightDTO> entry : nodeWeightsMap.entrySet()) {
+            Long characterBookId = parseCharacterId(entry.getKey(), "relationship.nodeWeights.characterId");
+            NodeWeightDTO weightDTO = entry.getValue();
+            if (weightDTO == null) {
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship.nodeWeights value is required: " + characterBookId);
+            }
+
+            Character character = characterRepository.findByBookAndCharacterId(book, characterBookId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND,
+                            "Character not found in book: " + characterBookId));
+
+            stats.add(EventCharacterStat.builder()
+                    .event(event)
+                    .character(character)
+                    .nodeWeight(weightDTO.getWeight())
+                    .build());
+        }
+        return stats;
+    }
+
+    private List<EventRelationshipEdge> buildRelationshipDeltaEdges(Event event, Book book, List<RelationshipDTO> relationDTOs) {
+        if (relationDTOs == null || relationDTOs.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> rawEdgeKeys = new LinkedHashSet<>();
+        List<EventRelationshipEdge> edges = new ArrayList<>();
+        for (RelationshipDTO dto : relationDTOs) {
+            Long fromCharacterId = parseCharacterId(dto.getFromCharacterId(), "relationship.fromCharacterId");
+            Long toCharacterId = parseCharacterId(dto.getToCharacterId(), "relationship.toCharacterId");
+            if (fromCharacterId.equals(toCharacterId)) {
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship fromCharacterId and toCharacterId must differ.");
+            }
+
+            validateRelationshipDeltaItem(dto);
+
+            String rawEdgeKey = fromCharacterId + "->" + toCharacterId;
+            if (!rawEdgeKeys.add(rawEdgeKey)) {
+                throw new GeneralException(ErrorStatus._BAD_REQUEST, "Duplicate relationship delta edge in event: " + rawEdgeKey);
+            }
+
+            Character fromChar = characterRepository.findByBookAndCharacterId(book, fromCharacterId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND,
+                            "Character not found in book: " + fromCharacterId));
+            Character toChar = characterRepository.findByBookAndCharacterId(book, toCharacterId)
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND,
+                            "Character not found in book: " + toCharacterId));
+
+            try {
+                edges.add(EventRelationshipEdge.builder()
+                        .event(event)
+                        .fromCharacter(fromChar)
+                        .toCharacter(toChar)
+                        .explanation(dto.getReason())
+                        .sentimentScore(dto.getPositivity().floatValue())
+                        .interactionCount(dto.getEvidenceCount())
+                        .relationTags(objectMapper.writeValueAsString(dto.getLabels()))
+                        .build());
+            } catch (JsonProcessingException e) {
+                throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR,
+                        String.format("Failed to serialize relationship labels for %d -> %d", fromCharacterId, toCharacterId));
+            }
+        }
+        return edges;
+    }
+
+    private void validateRelationshipDeltaItem(RelationshipDTO dto) {
+        if (dto.getPositivity() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship positivity is required.");
+        }
+        if (dto.getPositivity() < -1.0 || dto.getPositivity() > 1.0) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship positivity must be between -1.0 and 1.0.");
+        }
+        if (dto.getEvidenceCount() == null || dto.getEvidenceCount() <= 0) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship evidenceCount must be positive.");
+        }
+        if (dto.getLabels() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship labels must not be null.");
+        }
+        for (String label : dto.getLabels()) {
+            requireText(label, "relationship.labels");
+        }
+    }
+
+    private void replaceRelationshipDelta(Event event) {
+        if (eventRelationshipEdgeRepository.existsByEvent(event)) {
+            eventRelationshipEdgeRepository.deleteByEvent(event);
+        }
+        if (statRepository.existsByEvent(event)) {
+            statRepository.deleteByEvent(event);
+        }
+    }
+
+    private int saveRelationshipDelta(RelationshipDeltaCandidate candidate) {
+        int savedCount = 0;
+        if (!candidate.stats().isEmpty()) {
+            statRepository.saveAll(candidate.stats());
+            savedCount += candidate.stats().size();
+        }
+        if (!candidate.edges().isEmpty()) {
+            eventRelationshipEdgeRepository.saveAll(candidate.edges());
+            savedCount += candidate.edges().size();
+        }
+        return savedCount;
+    }
+
+    private record RelationshipDeltaCandidate(
+            Event event,
+            List<EventCharacterStat> stats,
+            List<EventRelationshipEdge> edges
+    ) {
     }
 
     private SummaryItemDTO validateSummaryItem(SummaryItemDTO item) {

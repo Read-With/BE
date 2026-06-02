@@ -313,26 +313,28 @@ class AdminServiceTest {
     }
 
     @Test
-    @DisplayName("uploadRelationships saves node weights and edges from the current payload shape")
-    void uploadRelationships_withCorrectJsonStructure() throws IOException {
+    @DisplayName("uploadRelationshipDeltas saves node weights and edges from delta payload")
+    void uploadRelationshipDeltas_withCorrectJsonStructure() throws IOException {
         Long bookId = 1L;
         int chapterIdx = 1;
         int eventIdx = 1;
         String fileName = String.format("chapter%d_something_event_%d.json", chapterIdx, eventIdx);
         String jsonContent = """
                 {
+                  "contractVersion": "relationship-delta-v1",
                   "chapterIndex": 1,
                   "eventId": "ch1-e1",
-                  "relations": [
+                  "items": [
                     {
-                      "id1": "10",
-                      "id2": "20",
-                      "relation": ["friend"],
+                      "fromCharacterId": "10",
+                      "toCharacterId": "20",
+                      "labels": ["friend"],
                       "positivity": 0.9,
-                      "count": 5
+                      "evidenceCount": 5,
+                      "reason": "event reason"
                     }
                   ],
-                  "node_weights_accum": {
+                  "nodeWeights": {
                     "10": {
                       "weight": 15.5,
                       "count": 3
@@ -356,10 +358,8 @@ class AdminServiceTest {
         given(eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)).willReturn(Optional.of(event));
         given(characterRepository.findByBookAndCharacterId(book, 10L)).willReturn(Optional.of(fromChar));
         given(characterRepository.findByBookAndCharacterId(book, 20L)).willReturn(Optional.of(toChar));
-        given(statRepository.findByEventAndCharacter(any(), any())).willReturn(Optional.empty());
-        given(eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(any(), any(), any())).willReturn(false);
 
-        adminService.uploadRelationships(bookId, List.of(file));
+        adminService.uploadRelationshipDeltas(bookId, List.of(file));
 
         ArgumentCaptor<List<EventCharacterStat>> statCaptor = ArgumentCaptor.forClass(List.class);
         verify(statRepository, times(1)).saveAll(statCaptor.capture());
@@ -376,26 +376,28 @@ class AdminServiceTest {
         assertThat(savedEdges.get(0).getToCharacter().getId()).isEqualTo(20L);
         assertThat(savedEdges.get(0).getSentimentScore()).isEqualTo(0.9f);
         assertThat(savedEdges.get(0).getInteractionCount()).isEqualTo(5);
+        assertThat(savedEdges.get(0).getExplanation()).isEqualTo("event reason");
     }
 
     @Test
-    @DisplayName("uploadRelationships rejects duplicate relationship data")
-    void uploadRelationships_throwsException_whenDataExists() throws IOException {
+    @DisplayName("uploadRelationshipDeltas replaces existing event relationship data")
+    void uploadRelationshipDeltas_replacesExistingEventData() throws IOException {
         Long bookId = 1L;
         int chapterIdx = 1;
         int eventIdx = 1;
         String fileName = String.format("chapter%d_something_event_%d.json", chapterIdx, eventIdx);
         String jsonContent = """
                 {
+                  "contractVersion": "relationship-delta-v1",
                   "chapterIndex": 1,
                   "eventId": "ch1-e1",
-                  "relations": [
+                  "items": [
                     {
-                      "id1": "10",
-                      "id2": "20",
-                      "relation": ["friend"],
+                      "fromCharacterId": "10",
+                      "toCharacterId": "20",
+                      "labels": ["friend"],
                       "positivity": 0.9,
-                      "count": 1
+                      "evidenceCount": 1
                     }
                   ]
                 }
@@ -416,11 +418,12 @@ class AdminServiceTest {
         given(eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)).willReturn(Optional.of(event));
         given(characterRepository.findByBookAndCharacterId(book, 10L)).willReturn(Optional.of(fromChar));
         given(characterRepository.findByBookAndCharacterId(book, 20L)).willReturn(Optional.of(toChar));
-        given(eventRelationshipEdgeRepository.existsByEventAndFromCharacterAndToCharacter(event, fromChar, toChar)).willReturn(true);
+        given(eventRelationshipEdgeRepository.existsByEvent(event)).willReturn(true);
 
-        GeneralException exception = assertThrows(GeneralException.class, () -> adminService.uploadRelationships(bookId, List.of(file)));
+        adminService.uploadRelationshipDeltas(bookId, List.of(file));
 
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.RELATIONSHIP_DATA_ALREADY_EXISTS);
+        verify(eventRelationshipEdgeRepository, times(1)).deleteByEvent(event);
+        verify(eventRelationshipEdgeRepository, times(1)).saveAll(anyList());
     }
 
     @Test

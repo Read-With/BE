@@ -24,6 +24,12 @@ public interface EventCharacterStatRepository extends JpaRepository<EventCharact
 
     List<EventCharacterStat> findByEventIn(List<Event> events);
 
+    @Query("SELECT stat FROM EventCharacterStat stat " +
+           "JOIN stat.event event JOIN event.chapter chapter " +
+           "WHERE event IN :events " +
+           "ORDER BY chapter.idx ASC, event.idx ASC, stat.id ASC")
+    List<EventCharacterStat> findByEventsOrdered(@Param("events") List<Event> events);
+
     boolean existsByEvent(Event event);
 
     int deleteByEvent(Event event);
