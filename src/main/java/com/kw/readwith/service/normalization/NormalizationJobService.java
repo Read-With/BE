@@ -99,6 +99,42 @@ public class NormalizationJobService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 실패한 정규화 작업을 재시도하기 위해 새로운 작업을 생성하고 대기열(QUEUE)에 추가합니다.
+     *
+     * @param failedJobId 재시도할 원본(실패한) 작업의 ID
+     * @return 새로 생성되어 대기열에 추가된 작업의 정보
+     */
+    @Transactional
+    public NormalizationJobResponseDTO retryFailedJob(Long failedJobId) {
+        // 1. 요청받은 ID로 실패한 작업을 데이터베이스에서 조회합니다.
+        ProcessingJob failedJob = processingJobRepository.findById(failedJobId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus._BAD_REQUEST, "Failed job not found."));
+
+        // 2. 해당 작업이 실제로 '실패(FAILED)' 상태인지 확인합니다. 실패하지 않은 작업은 재시도할 수 없습니다.
+        if (failedJob.getStatus() != ProcessingJobStatus.FAILED) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Job did not fail. Cannot retry.");
+        }
+
+        // 3. 해당 작업이 '정규화(NORMALIZATION)' 파이프라인인지 확인합니다.
+        if (failedJob.getPipelineType() != ProcessingPipelineType.NORMALIZATION) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "Job is not a normalization job.");
+        }
+
+        // 4. 실패한 작업의 도서 정보와 소스 버전 정보를 가져옵니다.
+        Book book = failedJob.getBook();
+        String sourceVersion = failedJob.getSourceVersion();
+        
+        // 5. 실패한 기존 작업의 triggeredBy 값을 그대로 사용합니다.
+        String triggeredBy = failedJob.getTriggeredBy();
+
+        // 6. 이전 작업과 동일한 조건으로 새로운 작업을 생성하여 대기열에 넣습니다.
+        ProcessingJob newJob = createQueuedJob(book, sourceVersion, triggeredBy);
+
+        // 7. 새로 생성된 작업 정보를 DTO로 변환하여 반환합니다.
+        return mapToResponseDTO(newJob);
+    }
+
     private NormalizationJobResponseDTO mapToResponseDTO(ProcessingJob job) {
         return NormalizationJobResponseDTO.builder()
                 .id(job.getId())

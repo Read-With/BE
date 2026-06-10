@@ -1,6 +1,7 @@
 package com.kw.readwith.service.normalization;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.config.EpubNormalizationProperties;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
@@ -15,6 +16,7 @@ import com.kw.readwith.repository.ProcessingJobLogRepository;
 import com.kw.readwith.repository.ProcessingJobRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -81,6 +84,106 @@ public class NormalizationJobServiceTest {
                 transactionManager
         );
     }
+
+    @Nested
+    @DisplayName("retryFailedJob 메서드")
+    class RetryFailedJobTest {
+
+        private Book book;
+        private ProcessingJob failedJob;
+
+        @BeforeEach
+        void setup() {
+            book = Book.builder().title("Test Book").build();
+            ReflectionTestUtils.setField(book, "id", 1L);
+
+            failedJob = ProcessingJob.builder()
+                    .id(100L)
+                    .book(book)
+                    .pipelineType(ProcessingPipelineType.NORMALIZATION)
+                    .status(ProcessingJobStatus.FAILED)
+                    .sourceVersion("source-v1")
+                    .triggeredBy("UPLOAD")
+                    .build();
+        }
+
+        @Test
+        @DisplayName("실패한 정규화 작업을 재시도하면, 새로운 작업이 QUEUED 상태로 생성된다")
+        void retryFailedNormalizationJob_shouldCreateNewQueuedJob() {
+            // given
+            when(processingJobRepository.findById(100L)).thenReturn(Optional.of(failedJob));
+            when(normalizedArtifactStorageService.newNormalizationRunId()).thenReturn("new-run-id");
+            when(processingJobRepository.save(any(ProcessingJob.class))).thenAnswer(invocation -> {
+                ProcessingJob newJob = invocation.getArgument(0);
+                ReflectionTestUtils.setField(newJob, "id", 101L);
+                return newJob;
+            });
+
+            // when
+            var response = normalizationJobService.retryFailedJob(100L);
+
+            // then
+            assertThat(response.getId()).isEqualTo(101L);
+            assertThat(response.getStatus()).isEqualTo(ProcessingJobStatus.QUEUED);
+            assertThat(response.getSourceVersion()).isEqualTo("source-v1");
+            assertThat(response.getTriggeredBy()).isEqualTo("UPLOAD");
+            assertThat(response.getRunId()).isEqualTo("new-run-id");
+
+            ArgumentCaptor<ProcessingJob> jobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
+            verify(processingJobRepository).save(jobCaptor.capture());
+            ProcessingJob savedJob = jobCaptor.getValue();
+
+            assertThat(savedJob.getStatus()).isEqualTo(ProcessingJobStatus.QUEUED);
+            assertThat(savedJob.getTriggeredBy()).isEqualTo("UPLOAD");
+        }
+
+        @Test
+        @DisplayName("작업 상태가 FAILED가 아니면 예외를 발생시킨다")
+        void retryNonFailedJob_shouldThrowException() {
+            // given
+            failedJob.markReady("some-path", "completed"); // 상태를 FAILED가 아닌 것으로 변경
+            when(processingJobRepository.findById(100L)).thenReturn(Optional.of(failedJob));
+
+            // when & then
+            assertThatThrownBy(() -> normalizationJobService.retryFailedJob(100L))
+                    .isInstanceOf(GeneralException.class)
+                    .hasMessageContaining("Job did not fail. Cannot retry.");
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 작업 ID이면 예외를 발생시킨다")
+        void retryNonExistentJob_shouldThrowException() {
+            // given
+            when(processingJobRepository.findById(999L)).thenReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> normalizationJobService.retryFailedJob(999L))
+                    .isInstanceOf(GeneralException.class)
+
+                    .hasMessageContaining("Failed job not found.");
+        }
+
+        @Test
+        @DisplayName("작업 타입이 NORMALIZATION이 아니면 예외를 발생시킨다")
+        void retryNonNormalizationJob_shouldThrowException() {
+            // given
+            failedJob = ProcessingJob.builder()
+                    .id(100L)
+                    .book(book)
+                    .pipelineType(ProcessingPipelineType.AI_ANALYSIS) // 다른 타입으로 설정
+                    .status(ProcessingJobStatus.FAILED)
+                    .sourceVersion("source-v1")
+                    .triggeredBy("UPLOAD")
+                    .build();
+            when(processingJobRepository.findById(100L)).thenReturn(Optional.of(failedJob));
+
+            // when & then
+            assertThatThrownBy(() -> normalizationJobService.retryFailedJob(100L))
+                    .isInstanceOf(GeneralException.class)
+                    .hasMessageContaining("Job is not a normalization job.");
+        }
+    }
+
 
     @Test
     @DisplayName("createQueuedJob uses the caller transaction for upload flow")
@@ -178,7 +281,7 @@ public class NormalizationJobServiceTest {
                 .book(book)
                 .pipelineType(ProcessingPipelineType.NORMALIZATION)
                 .runId("run-123")
-                .sourceVersion("src-v2")
+                .sourceVersion("src-v1")
                 .artifactPath("path/to/artifact")
                 .status(ProcessingJobStatus.READY)
                 .currentStep("completed")
