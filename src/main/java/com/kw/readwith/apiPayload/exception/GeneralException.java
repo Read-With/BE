@@ -11,11 +11,13 @@ public class GeneralException extends RuntimeException {
     private final String overrideMessage;
 
     public GeneralException(BaseErrorCode code) {
+        super(code.getReason().getMessage());
         this.code = code;
         this.overrideMessage = null;
     }
 
     public GeneralException(BaseErrorCode code, String overrideMessage) {
+        super(overrideMessage);
         this.code = code;
         this.overrideMessage = overrideMessage;
     }
