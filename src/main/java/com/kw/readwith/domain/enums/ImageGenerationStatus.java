@@ -10,7 +10,7 @@ public enum ImageGenerationStatus {
     PENDING,
     
     /**
-     * 이미지 생성 중 (DALL-E API 호출 중)
+     * 이미지 생성 중 (OpenAI 이미지 API 호출 중)
      */
     GENERATING,
     
