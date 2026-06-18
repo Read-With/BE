@@ -8,6 +8,7 @@ import com.kw.readwith.domain.enums.ImageGenerationStatus;
 import com.kw.readwith.repository.CharacterRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.image.Image;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.ai.openai.OpenAiImageModel;
@@ -142,24 +143,15 @@ public class CharacterImageService {
             Character character = getCharacterReadOnly(characterId);
             transactionService.updateStatus(characterId, ImageGenerationStatus.GENERATING);
 
-            String prompt = buildDallePrompt(character);
+            String prompt = buildImagePrompt(character);
             log.debug("Generated image prompt for characterId={}: {}", characterId, prompt);
 
             ImageResponse response = imageModel.call(
-                    new ImagePrompt(
-                            prompt,
-                            OpenAiImageOptions.builder()
-                                    .withModel("dall-e-3")
-                                    .withQuality("standard")
-                                    .withN(1)
-                                    .withHeight(1024)
-                                    .withWidth(1024)
-                                    .build()
-                    )
+                    new ImagePrompt(prompt, buildImageOptions())
             );
 
-            String dalleImageUrl = response.getResult().getOutput().getUrl();
-            byte[] imageData = downloadImageFromUrl(dalleImageUrl);
+            Image generatedImage = response.getResult().getOutput();
+            byte[] imageData = resolveGeneratedImageData(generatedImage);
             String base64Image = Base64.getEncoder().encodeToString(imageData);
 
             String s3KeyName = buildS3KeyName(character);
@@ -185,7 +177,37 @@ public class CharacterImageService {
         transactionService.updateImageAndStatus(characterId, s3Url, ImageGenerationStatus.COMPLETED);
     }
 
-    private String buildDallePrompt(Character character) {
+    private OpenAiImageOptions buildImageOptions() {
+        OpenAiImageOptions.Builder builder = OpenAiImageOptions.builder()
+                .withModel(resolveImageModel())
+                .withQuality(resolveImageQuality())
+                .withN(positiveOrDefault(imageProperties.getCount(), 1))
+                .withHeight(positiveOrDefault(imageProperties.getHeight(), 1024))
+                .withWidth(positiveOrDefault(imageProperties.getWidth(), 1024));
+
+        String responseFormat = normalizePromptSegment(imageProperties.getResponseFormat());
+        if (responseFormat != null) {
+            builder.withResponseFormat(responseFormat);
+        }
+
+        return builder.build();
+    }
+
+    private String resolveImageModel() {
+        String configured = normalizePromptSegment(imageProperties.getModel());
+        return configured != null ? configured : "gpt-image-1";
+    }
+
+    private String resolveImageQuality() {
+        String configured = normalizePromptSegment(imageProperties.getQuality());
+        return configured != null ? configured : "medium";
+    }
+
+    private int positiveOrDefault(int value, int defaultValue) {
+        return value > 0 ? value : defaultValue;
+    }
+
+    private String buildImagePrompt(Character character) {
         StringBuilder prompt = new StringBuilder();
 
         appendPromptSegment(prompt, resolveBaseStylePrompt());
@@ -262,6 +284,32 @@ public class CharacterImageService {
             prompt.append(", ");
         }
         prompt.append(segment);
+    }
+
+    private byte[] resolveGeneratedImageData(Image image) throws IOException {
+        if (image == null) {
+            throw new IOException("Generated image response is empty.");
+        }
+
+        String b64Json = normalizePromptSegment(image.getB64Json());
+        if (b64Json != null) {
+            try {
+                byte[] imageData = Base64.getDecoder().decode(b64Json.replaceAll("\\s+", ""));
+                if (imageData.length == 0) {
+                    throw new IOException("Generated image base64 payload is empty.");
+                }
+                return imageData;
+            } catch (IllegalArgumentException e) {
+                throw new IOException("Generated image base64 payload is invalid.", e);
+            }
+        }
+
+        String imageUrl = normalizePromptSegment(image.getUrl());
+        if (imageUrl != null) {
+            return downloadImageFromUrl(imageUrl);
+        }
+
+        throw new IOException("Generated image response has neither base64 data nor URL.");
     }
 
     private byte[] downloadImageFromUrl(String imageUrl) throws IOException {

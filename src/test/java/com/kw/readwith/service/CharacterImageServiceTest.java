@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -17,12 +18,15 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.ai.image.Image;
 import org.springframework.ai.image.ImageGeneration;
+import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.ai.openai.OpenAiImageModel;
+import org.springframework.ai.openai.OpenAiImageOptions;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -81,6 +85,12 @@ class CharacterImageServiceTest {
                 .build();
 
         when(imageProperties.getFallbackUrl()).thenReturn("https://cdn.readwith.store/character/default.png");
+        when(imageProperties.getModel()).thenReturn("gpt-image-1");
+        when(imageProperties.getQuality()).thenReturn("medium");
+        when(imageProperties.getWidth()).thenReturn(1024);
+        when(imageProperties.getHeight()).thenReturn(1024);
+        when(imageProperties.getCount()).thenReturn(1);
+        when(imageProperties.getResponseFormat()).thenReturn("");
         when(imageProperties.getBaseStylePrompt()).thenReturn("Configured editorial gouache base style");
         when(imageProperties.getS3Path()).thenReturn("character-images");
         when(imageProperties.getBatchSize()).thenReturn(10);
@@ -88,9 +98,9 @@ class CharacterImageServiceTest {
     }
 
     @Test
-    @DisplayName("buildDallePrompt uses configured base style prompt and composes the remaining sections")
-    void buildDallePrompt_composesStructuredPrompt() {
-        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", testCharacter);
+    @DisplayName("buildImagePrompt uses configured base style prompt and composes the remaining sections")
+    void buildImagePrompt_composesStructuredPrompt() {
+        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildImagePrompt", testCharacter);
 
         assertThat(prompt).contains("Configured editorial gouache base style");
         assertThat(prompt).contains("exactly one character, single centered chest-up bust portrait");
@@ -102,19 +112,19 @@ class CharacterImageServiceTest {
     }
 
     @Test
-    @DisplayName("buildDallePrompt falls back to default base style prompt when configuration is missing")
-    void buildDallePrompt_fallsBackToDefaultBaseStylePrompt() {
+    @DisplayName("buildImagePrompt falls back to default base style prompt when configuration is missing")
+    void buildImagePrompt_fallsBackToDefaultBaseStylePrompt() {
         when(imageProperties.getBaseStylePrompt()).thenReturn(null);
 
-        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", testCharacter);
+        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildImagePrompt", testCharacter);
 
         assertThat(prompt).contains("A single centered chest-up character portrait in a mature editorial gouache illustration style");
         assertThat(prompt).contains("flat matte gouache rendering");
     }
 
     @Test
-    @DisplayName("buildDallePrompt removes multi-subject and scene-driving prompt segments")
-    void buildDallePrompt_sanitizesRiskyPromptSegments() {
+    @DisplayName("buildImagePrompt removes multi-subject and scene-driving prompt segments")
+    void buildImagePrompt_sanitizesRiskyPromptSegments() {
         Book riskyBook = Book.builder()
                 .id(2L)
                 .title("Risky Book")
@@ -133,7 +143,7 @@ class CharacterImageServiceTest {
                 .imageGenerationStatus(ImageGenerationStatus.PENDING)
                 .build();
 
-        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildDallePrompt", riskyCharacter);
+        String prompt = (String) ReflectionTestUtils.invokeMethod(characterImageService, "buildImagePrompt", riskyCharacter);
 
         assertThat(prompt).contains("Victorian urban gothic");
         assertThat(prompt).contains("muted sepia palette");
@@ -165,7 +175,48 @@ class CharacterImageServiceTest {
         characterImageService.generateAndSaveImage(testCharacter.getId());
 
         verify(transactionService).updateStatus(testCharacter.getId(), ImageGenerationStatus.GENERATING);
+        ArgumentCaptor<ImagePrompt> imagePromptCaptor = ArgumentCaptor.forClass(ImagePrompt.class);
+        verify(imageModel).call(imagePromptCaptor.capture());
+        OpenAiImageOptions imageOptions = (OpenAiImageOptions) imagePromptCaptor.getValue().getOptions();
+        assertThat(imageOptions.getModel()).isEqualTo("gpt-image-1");
+        assertThat(imageOptions.getQuality()).isEqualTo("medium");
+        assertThat(imageOptions.getWidth()).isEqualTo(1024);
+        assertThat(imageOptions.getHeight()).isEqualTo(1024);
+        assertThat(imageOptions.getN()).isEqualTo(1);
         verify(s3Manager).uploadFileFromBase64(eq("character-images/1/10.png"), anyString(), eq("image/png"));
+        verify(transactionService).updateImageAndStatus(
+                testCharacter.getId(),
+                "https://cdn.readwith.store/character-images/1/10.png",
+                ImageGenerationStatus.COMPLETED
+        );
+    }
+
+    @Test
+    @DisplayName("generateAndSaveImage uploads gpt-image-1 base64 response")
+    void generateAndSaveImage_uploadsBase64JsonResponse() {
+        byte[] generatedImage = new byte[]{9, 8, 7, 6};
+
+        when(characterRepository.findByIdWithBook(testCharacter.getId())).thenReturn(Optional.of(testCharacter));
+        when(s3Manager.uploadFileFromBase64(anyString(), anyString(), eq("image/png")))
+                .thenReturn("https://cdn.readwith.store/character-images/1/10.png");
+
+        ImageResponse imageResponse = mock(ImageResponse.class);
+        ImageGeneration generation = mock(ImageGeneration.class);
+        Image image = mock(Image.class);
+        when(imageModel.call(any())).thenReturn(imageResponse);
+        when(imageResponse.getResult()).thenReturn(generation);
+        when(generation.getOutput()).thenReturn(image);
+        when(image.getB64Json()).thenReturn(Base64.getEncoder().encodeToString(generatedImage));
+
+        characterImageService.generateAndSaveImage(testCharacter.getId());
+
+        ArgumentCaptor<String> base64Captor = ArgumentCaptor.forClass(String.class);
+        verify(s3Manager).uploadFileFromBase64(
+                eq("character-images/1/10.png"),
+                base64Captor.capture(),
+                eq("image/png")
+        );
+        assertThat(Base64.getDecoder().decode(base64Captor.getValue())).containsExactly(generatedImage);
         verify(transactionService).updateImageAndStatus(
                 testCharacter.getId(),
                 "https://cdn.readwith.store/character-images/1/10.png",

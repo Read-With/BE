@@ -63,10 +63,10 @@ spring:
       api-key: ${OPENAI_API_KEY}
       image:
         options:
-          model: dall-e-3
-          size: 1024x1024
-          quality: standard
-          n: 1
+          model: ${CHARACTER_IMAGE_MODEL:gpt-image-1}
+          size: ${CHARACTER_IMAGE_SIZE:1024x1024}
+          quality: ${CHARACTER_IMAGE_QUALITY:medium}
+          n: ${CHARACTER_IMAGE_COUNT:1}
 
 epub:
   normalization:
@@ -118,6 +118,12 @@ cloud:
 # 캐릭터 이미지 생성 설정
 character-image:
   fallback-url: https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/default-character.jpg
+  model: ${CHARACTER_IMAGE_MODEL:gpt-image-1}
+  quality: ${CHARACTER_IMAGE_QUALITY:medium}
+  width: ${CHARACTER_IMAGE_WIDTH:1024}
+  height: ${CHARACTER_IMAGE_HEIGHT:1024}
+  count: ${CHARACTER_IMAGE_COUNT:1}
+  response-format: ${CHARACTER_IMAGE_RESPONSE_FORMAT:}
   base-style-prompt: ${CHARACTER_IMAGE_BASE_STYLE_PROMPT:A single centered chest-up character portrait in a mature editorial gouache illustration style, flat matte gouache rendering, clean silhouette, minimal linework, soft paper texture, plain muted background, low-saturation palette, restrained literary mood, natural facial proportions, not cartoonish, not anime, not painterly, not photorealistic}
 
   # 극강 통제 프롬프트 (얼굴만 나오도록)
@@ -196,7 +202,7 @@ character-image:
     ❌ 3D rendering appearance
     ❌ Busy or cluttered backgrounds
 
-    REMEMBER: This is a SIMPLE HEAD PORTRAIT ONLY. The person's face is THE ONLY element. Everything else must be plain beige paper. If DALL-E tries to add ANY decoration, pattern, symbol, or ornament - REJECT and keep background COMPLETELY PLAIN."
+    REMEMBER: This is a SIMPLE HEAD PORTRAIT ONLY. The person's face is THE ONLY element. Everything else must be plain beige paper. If the image model tries to add ANY decoration, pattern, symbol, or ornament - REJECT and keep background COMPLETELY PLAIN."
 
   s3-path: character-images
 

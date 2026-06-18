@@ -14,13 +14,20 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "character-image")
 public class CharacterImageProperties {
 
+    private String model = "gpt-image-1";
+    private String quality = "medium";
+    private int width = 1024;
+    private int height = 1024;
+    private int count = 1;
+    private String responseFormat;
+
     /**
      * 이미지 생성 실패 시 사용할 기본 이미지 URL
      */
     private String fallbackUrl;
 
     /**
-     * DALL-E 프롬프트에 공통적으로 적용할 아트 스타일
+     * OpenAI 이미지 프롬프트에 공통적으로 적용할 아트 스타일
      */
     private String baseStylePrompt;
 
