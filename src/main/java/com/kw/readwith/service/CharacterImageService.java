@@ -6,6 +6,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.enums.ImageGenerationStatus;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.service.image.GeneratedCharacterImage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.image.Image;
@@ -21,9 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -143,19 +148,8 @@ public class CharacterImageService {
             Character character = getCharacterReadOnly(characterId);
             transactionService.updateStatus(characterId, ImageGenerationStatus.GENERATING);
 
-            String prompt = buildImagePrompt(character);
-            log.debug("Generated image prompt for characterId={}: {}", characterId, prompt);
-
-            ImageResponse response = imageModel.call(
-                    new ImagePrompt(prompt, buildImageOptions())
-            );
-
-            Image generatedImage = response.getResult().getOutput();
-            byte[] imageData = resolveGeneratedImageData(generatedImage);
-            String base64Image = Base64.getEncoder().encodeToString(imageData);
-
-            String s3KeyName = buildS3KeyName(character);
-            String s3Url = s3Manager.uploadFileFromBase64(s3KeyName, base64Image, "image/png");
+            GeneratedCharacterImage generatedImage = generateTextImage(character);
+            String s3Url = uploadGeneratedImage(character, generatedImage.imageData(), buildPublishedS3KeyName(character));
             updateImageUrlOnly(characterId, s3Url);
 
             log.info("Character image generation completed. characterId={}, s3Url={}", characterId, s3Url);
@@ -193,6 +187,46 @@ public class CharacterImageService {
         return builder.build();
     }
 
+    public GeneratedCharacterImage generateTextImage(Character character) throws IOException {
+        String prompt = buildImagePrompt(character);
+        log.debug("Generated image prompt for characterId={}: {}", character.getId(), prompt);
+
+        ImageResponse response = imageModel.call(
+                new ImagePrompt(prompt, buildImageOptions())
+        );
+
+        Image generatedImage = response.getResult().getOutput();
+        return new GeneratedCharacterImage(
+                resolveGeneratedImageData(generatedImage),
+                resolveImageModel(),
+                prompt,
+                sha256(prompt),
+                null
+        );
+    }
+
+    public String uploadGeneratedImage(Character character, byte[] imageData, String s3KeyName) {
+        String base64Image = Base64.getEncoder().encodeToString(imageData);
+        return s3Manager.uploadFileFromBase64(s3KeyName, base64Image, "image/png");
+    }
+
+    public String buildReferenceCandidateS3KeyName(Character character, Long assetId) {
+        return String.format("%s/%d/reference/%d-%s.png",
+                imageProperties.getS3Path(),
+                character.getBook().getId(),
+                assetId,
+                UUID.randomUUID());
+    }
+
+    public String buildCandidateS3KeyName(Character character, Long assetId) {
+        return String.format("%s/%d/%d/candidates/%d-%s.png",
+                imageProperties.getS3Path(),
+                character.getBook().getId(),
+                character.getId(),
+                assetId,
+                UUID.randomUUID());
+    }
+
     private String resolveImageModel() {
         String configured = normalizePromptSegment(imageProperties.getModel());
         return configured != null ? configured : "gpt-image-1";
@@ -207,7 +241,7 @@ public class CharacterImageService {
         return value > 0 ? value : defaultValue;
     }
 
-    private String buildImagePrompt(Character character) {
+    public String buildImagePrompt(Character character) {
         StringBuilder prompt = new StringBuilder();
 
         appendPromptSegment(prompt, resolveBaseStylePrompt());
@@ -330,11 +364,25 @@ public class CharacterImageService {
         }
     }
 
-    private String buildS3KeyName(Character character) {
+    private String buildPublishedS3KeyName(Character character) {
         return String.format("%s/%d/%d.png",
                 imageProperties.getS3Path(),
                 character.getBook().getId(),
                 character.getId());
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available.", e);
+        }
     }
 
     private void saveFallbackImage(Long characterId) {

@@ -1,6 +1,7 @@
 package com.kw.readwith.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
@@ -52,7 +53,10 @@ class BookControllerTest {
                 .andReturn();
 
         String responseJson = result.getResponse().getContentAsString();
-        List<BookSummaryDTO> list = objectMapper.readValue(responseJson, new TypeReference<>() {});
+        List<BookSummaryDTO> list = objectMapper.readValue(
+                readResult(responseJson).traverse(),
+                new TypeReference<>() {}
+        );
         assertThat(list).isNotEmpty();
     }
 
@@ -65,8 +69,14 @@ class BookControllerTest {
                 .andReturn();
 
         String responseJson = result.getResponse().getContentAsString();
-        BookDetailDTO dto = objectMapper.readValue(responseJson, BookDetailDTO.class);
+        BookDetailDTO dto = objectMapper.treeToValue(readResult(responseJson), BookDetailDTO.class);
         assertThat(dto.getId()).isEqualTo(existingBookId);
         assertThat(dto.getTitle()).isNotBlank();
     }
-} 
+
+    private JsonNode readResult(String responseJson) throws Exception {
+        JsonNode root = objectMapper.readTree(responseJson);
+        assertThat(root.path("isSuccess").asBoolean()).isTrue();
+        return root.path("result");
+    }
+}

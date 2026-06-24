@@ -147,16 +147,6 @@ public class AdminService {
                 throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to save characters.");
             }
 
-            List<Long> characterIds = savedCharacters.stream()
-                    .map(Character::getId)
-                    .collect(Collectors.toList());
-
-            try {
-                characterImageService.generateImagesAsync(characterIds);
-            } catch (Exception e) {
-                log.error("Failed to start character image generation.", e);
-            }
-
             bookAnalysisStatusService.refreshStatus(bookId);
             return savedCharacters.size();
         } catch (IOException e) {

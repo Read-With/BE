@@ -45,7 +45,6 @@ public class Book extends BaseEntity {
     @Column(name = "summary_url", length = 255)
     private String summaryUrl;
 
-    @Lob
     @Column(name = "book_prompt", columnDefinition = "TEXT")
     private String bookPrompt;
 

@@ -198,7 +198,7 @@ public class NormalizationJobServiceTest {
         assertThat(response.getBookId()).isEqualTo(bookId);
         assertThat(response.getBookTitle()).isEqualTo("Book Title");
         assertThat(response.getPipelineType()).isEqualTo(ProcessingPipelineType.NORMALIZATION);
-        assertThat(response.getSourceVersion()).isEqualTo("src-v1");
+        assertThat(response.getSourceVersion()).isEqualTo("src-v2");
         assertThat(response.getArtifactPath()).isEqualTo("path/to/artifact");
         assertThat(response.getStatus()).isEqualTo(ProcessingJobStatus.READY);
         assertThat(response.getCurrentStep()).isEqualTo("completed");
