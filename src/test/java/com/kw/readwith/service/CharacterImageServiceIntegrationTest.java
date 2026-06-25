@@ -7,6 +7,7 @@ import com.kw.readwith.domain.enums.ImageGenerationStatus;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.CharacterRepository;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("캐릭터 이미지 생성 완전 통합 테스트 (실제 API 호출)")
+@EnabledIfEnvironmentVariable(named = "RUN_REAL_IMAGE_INTEGRATION_TESTS", matches = "true")
 class CharacterImageServiceIntegrationTest {
 
     @Autowired

@@ -44,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -149,6 +150,7 @@ class AdminServiceTest {
         assertThat(savedCharacters.get(0).getName()).isEqualTo("Harry Potter");
         assertThat(savedCharacters.get(0).isMainCharacter()).isTrue();
         assertThat(book.getBookPrompt()).isEqualTo("Victorian urban gothic, muted sepia and deep green palette");
+        verify(characterImageService, never()).generateImagesAsync(anyList());
     }
 
     @Test

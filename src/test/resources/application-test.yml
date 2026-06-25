@@ -12,6 +12,32 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+        hbm2ddl:
+          auto: update
   sql:
     init:
-      mode: never 
+      mode: never
+  ai:
+    openai:
+      api-key: test
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test
+            client-secret: test
+cloud:
+  aws:
+    s3:
+      bucket: test-bucket
+    region:
+      static: ap-northeast-2
+    stack:
+      auto: false
+    credentials:
+      accessKey: test
+      secretKey: test
+    path:
+      original: original
+      metadata: metadata

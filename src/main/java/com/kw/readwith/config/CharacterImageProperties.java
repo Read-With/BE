@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class CharacterImageProperties {
 
     private String model = "gpt-image-1";
+    private String editModel = "gpt-image-1";
     private String quality = "medium";
     private int width = 1024;
     private int height = 1024;

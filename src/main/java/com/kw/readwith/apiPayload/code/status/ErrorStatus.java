@@ -55,6 +55,15 @@ public enum ErrorStatus implements BaseErrorCode {
     INVALID_FILE_NAME_FORMAT(HttpStatus.BAD_REQUEST, "ADMIN4016", "잘못된 형식의 파일 이름입니다. 'chapter<숫자>_perspective_summaries.json' 형식을 따라야 합니다."),
     NODE_WEIGHT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ADMIN4018", "해당 이벤트의 캐릭터 가중치 데이터가 이미 존재합니다."),
 
+    IMAGE_ASSET_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4020", "해당 캐릭터 이미지 후보를 찾을 수 없습니다."),
+    IMAGE_ASSET_NOT_BELONG_TO_BOOK(HttpStatus.BAD_REQUEST, "ADMIN4021", "해당 이미지 후보가 요청한 책에 속하지 않습니다."),
+    IMAGE_ASSET_INVALID_STATUS(HttpStatus.BAD_REQUEST, "ADMIN4022", "현재 상태에서는 이미지 후보 작업을 수행할 수 없습니다."),
+    IMAGE_REFERENCE_NOT_APPROVED(HttpStatus.BAD_REQUEST, "ADMIN4023", "승인된 대표 이미지가 없어 fan-out 생성을 시작할 수 없습니다."),
+    INVALID_IMAGE_FANOUT_SCOPE(HttpStatus.BAD_REQUEST, "ADMIN4024", "잘못된 이미지 fan-out scope 값입니다. 허용값: MAIN_ONLY, GRAPH_VISIBLE, SELECTED, STALE_ONLY, FAILED_ONLY, ALL"),
+    INVALID_IMAGE_PUBLISH_POLICY(HttpStatus.BAD_REQUEST, "ADMIN4025", "잘못된 이미지 게시 정책입니다. 허용값: AUTO_AFTER_QA, MANUAL"),
+    IMAGE_REFERENCE_CHARACTER_REQUIRED(HttpStatus.BAD_REQUEST, "ADMIN4026", "대표 이미지 후보로 사용할 인물을 찾을 수 없습니다."),
+    IMAGE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ADMIN5020", "캐릭터 이미지 생성에 실패했습니다."),
+
     // Bookmark
     BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKMARK4001", "해당 북마크를 찾을 수 없습니다."),
     BOOKMARK_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "BOOKMARK4002", "동일한 위치에 이미 북마크가 존재합니다."),

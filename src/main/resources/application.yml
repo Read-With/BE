@@ -119,6 +119,7 @@ cloud:
 character-image:
   fallback-url: https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/default-character.jpg
   model: ${CHARACTER_IMAGE_MODEL:gpt-image-1}
+  edit-model: ${CHARACTER_IMAGE_EDIT_MODEL:${CHARACTER_IMAGE_MODEL:gpt-image-1}}
   quality: ${CHARACTER_IMAGE_QUALITY:medium}
   width: ${CHARACTER_IMAGE_WIDTH:1024}
   height: ${CHARACTER_IMAGE_HEIGHT:1024}

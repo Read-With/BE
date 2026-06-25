@@ -5,17 +5,27 @@ import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.dto.admin.AnalysisInputResponseDTO;
 import com.kw.readwith.dto.admin.BookAdminDetailDTO;
-import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
-import com.kw.readwith.dto.book.BookSummaryDTO;
+import com.kw.readwith.dto.admin.CharacterImageAssetDTO;
+import com.kw.readwith.dto.admin.CharacterImageBookStatusResponseDTO;
+import com.kw.readwith.dto.admin.CharacterImageCandidateRequestDTO;
 import com.kw.readwith.dto.admin.CharacterDTO;
+import com.kw.readwith.dto.admin.CharacterImageFanoutRequestDTO;
+import com.kw.readwith.dto.admin.CharacterImageFanoutResponseDTO;
+import com.kw.readwith.dto.admin.CharacterImageReferenceCandidateRequestDTO;
 import com.kw.readwith.dto.admin.NormalizationJobResponseDTO;
 import com.kw.readwith.dto.admin.ProcessingJobLogResponseDTO;
+import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
+import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.service.AdminService;
 import com.kw.readwith.service.AnalysisInputExportService;
+import com.kw.readwith.service.CharacterImageAdminService;
 import com.kw.readwith.service.normalization.NormalizationJobDispatcher;
 import com.kw.readwith.service.normalization.NormalizationJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -23,6 +33,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +50,7 @@ public class AdminController {
     private final AdminService adminService;
     private final AnalysisInputExportService analysisInputExportService;
     private final NormalizationJobService normalizationJobService;
+    private final CharacterImageAdminService characterImageAdminService;
     private final NormalizationJobDispatcher normalizationJobDispatcher;
 
     @Operation(summary = "모든 도서 전체 정보 조회", description = "book 테이블의 모든 행들의 모든 칼럼값들을 조회합니다. (관리자용)")
@@ -208,8 +220,255 @@ public class AdminController {
     }
 
     @Operation(
+            summary = "도서 캐릭터 이미지 QA Gate 상태 조회",
+            description = """
+                    도서 단위 대표 이미지와 캐릭터별 최신 이미지 후보 상태를 조회합니다.
+                    대표 이미지 상태: NONE, CANDIDATE_GENERATING, QA_FAILED, QA_PASSED, APPROVED, REJECTED, SUPERSEDED.
+                    이미지 asset 상태: GENERATING, QA_PENDING, QA_PASSED, QA_FAILED, REVIEW_REQUIRED, APPROVED, REJECTED, PUBLISHED, FAILED, STALE_REFERENCE, STALE_PROMPT, SUPERSEDED.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "이미지 QA Gate 상태 조회 성공",
+                    content = @Content(schema = @Schema(implementation = CharacterImageBookStatusResponseDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "PROGRESS4001: 해당 책을 찾을 수 없습니다."
+            )
+    })
+    @GetMapping("/books/{bookId}/character-images")
+    public ApiResponse<CharacterImageBookStatusResponseDTO> getCharacterImageStatus(
+            @Parameter(description = "조회 대상 도서 ID", required = true, example = "1") @PathVariable Long bookId) {
+        CharacterImageBookStatusResponseDTO response = characterImageAdminService.getBookStatus(bookId);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "대표 이미지 후보 생성",
+            description = """
+                    도서의 대표 스타일 기준이 될 이미지 후보를 생성합니다.
+                    요청에서 characterId를 생략하면 주요 인물 우선, 이름순으로 대표 인물을 자동 선택합니다.
+                    생성 직후 autoQa=true이면 QA를 실행하고, QA_PASSED가 되더라도 이 API는 게시하지 않습니다.
+                    대표 후보는 approve API를 통과해야 이후 fan-out 생성의 reference image가 됩니다.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "대표 이미지 후보 생성 요청 처리 성공. OpenAI/S3 실패는 asset.status=FAILED와 failureCode로 반환됩니다.",
+                    content = @Content(schema = @Schema(implementation = CharacterImageAssetDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4006: 요청한 인물이 해당 책 소속이 아닙니다. ADMIN4026: 대표 후보로 사용할 인물을 찾을 수 없습니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "PROGRESS4001: 해당 책을 찾을 수 없습니다. ADMIN4004: 해당 인물을 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/books/{bookId}/character-images/reference-candidates")
+    public ApiResponse<CharacterImageAssetDTO> createReferenceImageCandidate(
+            @Parameter(description = "대표 이미지 후보를 생성할 도서 ID", required = true, example = "1") @PathVariable Long bookId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "대표 이미지 후보 생성 옵션. 생략 가능하며, characterId를 생략하면 대표 인물을 자동 선택합니다.",
+                    required = false,
+                    content = @Content(schema = @Schema(implementation = CharacterImageReferenceCandidateRequestDTO.class))
+            )
+            @RequestBody(required = false) CharacterImageReferenceCandidateRequestDTO request) {
+        CharacterImageAssetDTO response = characterImageAdminService.createReferenceCandidate(bookId, request);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "대표 이미지 후보 승인",
+            description = """
+                    QA_PASSED 상태의 대표 이미지 후보를 승인합니다.
+                    승인되면 해당 asset이 도서의 active reference image가 되고, 기존 reference로 생성된 게시/승인 후보는 STALE_REFERENCE 대상이 됩니다.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "대표 이미지 후보 승인 성공",
+                    content = @Content(schema = @Schema(implementation = CharacterImageAssetDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4021: 요청한 책의 이미지 후보가 아닙니다. ADMIN4022: REFERENCE_SEED가 아니거나 QA_PASSED/APPROVED/PUBLISHED 상태가 아닙니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "PROGRESS4001: 해당 책을 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/books/{bookId}/character-images/reference-candidates/{assetId}/approve")
+    public ApiResponse<CharacterImageAssetDTO> approveReferenceImageCandidate(
+            @Parameter(description = "도서 ID", required = true, example = "1") @PathVariable Long bookId,
+            @Parameter(description = "승인할 대표 이미지 asset ID", required = true, example = "100") @PathVariable Long assetId) {
+        CharacterImageAssetDTO response = characterImageAdminService.approveReferenceCandidate(bookId, assetId);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "대표 이미지 후보 거절",
+            description = "대표 이미지 후보를 REJECTED 상태로 변경합니다. 현재 active reference인 후보를 거절하면 도서 reference 상태도 REJECTED로 변경됩니다."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "대표 이미지 후보 거절 성공",
+                    content = @Content(schema = @Schema(implementation = CharacterImageAssetDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4021: 요청한 책의 이미지 후보가 아닙니다. ADMIN4022: REFERENCE_SEED 역할이 아닙니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "PROGRESS4001: 해당 책을 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/books/{bookId}/character-images/reference-candidates/{assetId}/reject")
+    public ApiResponse<CharacterImageAssetDTO> rejectReferenceImageCandidate(
+            @Parameter(description = "도서 ID", required = true, example = "1") @PathVariable Long bookId,
+            @Parameter(description = "거절할 대표 이미지 asset ID", required = true, example = "100") @PathVariable Long assetId) {
+        CharacterImageAssetDTO response = characterImageAdminService.rejectReferenceCandidate(bookId, assetId);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "대표 이미지 기반 캐릭터 이미지 fan-out 생성",
+            description = """
+                    승인된 대표 이미지(reference image)를 입력 이미지로 사용해 대상 캐릭터들의 이미지 후보를 생성합니다.
+                    scope 허용값: MAIN_ONLY, GRAPH_VISIBLE, SELECTED, STALE_ONLY, FAILED_ONLY, ALL.
+                    publishPolicy 허용값: AUTO_AFTER_QA, MANUAL.
+                    MANUAL은 후보만 만들고, AUTO_AFTER_QA는 QA_PASSED 후보를 즉시 게시합니다.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "fan-out 생성 처리 성공. 개별 실패는 asset.status=FAILED와 failureCode로 반환됩니다.",
+                    content = @Content(schema = @Schema(implementation = CharacterImageFanoutResponseDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4023: 승인된 대표 이미지가 없습니다. ADMIN4024: 잘못된 scope 값입니다. ADMIN4025: 잘못된 publishPolicy 값입니다. ADMIN4006: 선택 인물이 책 소속이 아닙니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "PROGRESS4001: 해당 책을 찾을 수 없습니다. ADMIN4004: 선택 인물을 찾을 수 없습니다."
+            )
+    })
+    @PostMapping(value = "/books/{bookId}/character-images/fanout", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApiResponse<CharacterImageFanoutResponseDTO> fanoutCharacterImages(
+            @Parameter(description = "fan-out을 실행할 도서 ID", required = true, example = "1") @PathVariable Long bookId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "fan-out 생성 범위와 게시 정책",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = CharacterImageFanoutRequestDTO.class))
+            )
+            @RequestBody CharacterImageFanoutRequestDTO request) {
+        CharacterImageFanoutResponseDTO response = characterImageAdminService.fanout(bookId, request);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "캐릭터 이미지 후보 생성",
+            description = """
+                    특정 캐릭터의 이미지 후보를 생성합니다.
+                    도서에 승인된 대표 이미지가 있으면 reference edit 방식으로 생성하고, 없거나 대표 캐릭터 본인이면 text-to-image 방식으로 생성합니다.
+                    기본 publishPolicy는 MANUAL이라 QA 통과 후에도 바로 게시하지 않습니다.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "캐릭터 이미지 후보 생성 처리 성공. OpenAI/S3 실패는 asset.status=FAILED와 failureCode로 반환됩니다.",
+                    content = @Content(schema = @Schema(implementation = CharacterImageAssetDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4025: 잘못된 publishPolicy 값입니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "ADMIN4004: 해당 인물을 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/characters/{characterId}/image-candidates")
+    public ApiResponse<CharacterImageAssetDTO> createCharacterImageCandidate(
+            @Parameter(description = "이미지 후보를 생성할 캐릭터 DB ID", required = true, example = "10") @PathVariable Long characterId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "캐릭터 이미지 후보 생성 옵션. 생략 가능하며 기본값은 autoQa=true, publishPolicy=MANUAL입니다.",
+                    required = false,
+                    content = @Content(schema = @Schema(implementation = CharacterImageCandidateRequestDTO.class))
+            )
+            @RequestBody(required = false) CharacterImageCandidateRequestDTO request) {
+        CharacterImageAssetDTO response = characterImageAdminService.createCharacterCandidate(characterId, request);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "캐릭터 이미지 후보 승인/게시",
+            description = "QA_PASSED, APPROVED, PUBLISHED 상태의 캐릭터 이미지 후보를 게시 이미지로 반영합니다."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "캐릭터 이미지 후보 승인/게시 성공",
+                    content = @Content(schema = @Schema(implementation = CharacterImageAssetDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4021: 요청한 캐릭터의 이미지 후보가 아닙니다. ADMIN4022: 게시 가능한 상태가 아닙니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "ADMIN4004: 해당 인물을 찾을 수 없습니다. ADMIN4020: 해당 이미지 후보를 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/characters/{characterId}/image-candidates/{assetId}/approve")
+    public ApiResponse<CharacterImageAssetDTO> approveCharacterImageCandidate(
+            @Parameter(description = "캐릭터 DB ID", required = true, example = "10") @PathVariable Long characterId,
+            @Parameter(description = "승인/게시할 이미지 asset ID", required = true, example = "120") @PathVariable Long assetId) {
+        CharacterImageAssetDTO response = characterImageAdminService.approveCharacterCandidate(characterId, assetId);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "캐릭터 이미지 후보 거절",
+            description = "캐릭터 이미지 후보를 REJECTED 상태로 변경합니다."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "캐릭터 이미지 후보 거절 성공",
+                    content = @Content(schema = @Schema(implementation = CharacterImageAssetDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4021: 요청한 캐릭터의 이미지 후보가 아닙니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "ADMIN4004: 해당 인물을 찾을 수 없습니다. ADMIN4020: 해당 이미지 후보를 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/characters/{characterId}/image-candidates/{assetId}/reject")
+    public ApiResponse<CharacterImageAssetDTO> rejectCharacterImageCandidate(
+            @Parameter(description = "캐릭터 DB ID", required = true, example = "10") @PathVariable Long characterId,
+            @Parameter(description = "거절할 이미지 asset ID", required = true, example = "120") @PathVariable Long assetId) {
+        CharacterImageAssetDTO response = characterImageAdminService.rejectCharacterCandidate(characterId, assetId);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
             summary = "캐릭터 이미지 재생성",
-            description = "특정 캐릭터의 프로필 이미지를 다시 생성합니다. 기존 이미지가 없거나 생성이 실패했을 때 사용합니다.",
+            description = "호환용 legacy endpoint입니다. 이제 이미지를 바로 게시하지 않고 `/characters/{characterId}/image-candidates`와 같은 후보 생성 흐름으로 처리합니다.",
             security = {}
     )
     @PostMapping(
@@ -218,7 +477,13 @@ public class AdminController {
     )
     public ApiResponse<String> regenerateCharacterImage(
             @Parameter(description = "이미지를 다시 생성할 캐릭터 DB ID", required = true) @PathVariable Long characterId) {
-        adminService.regenerateCharacterImage(characterId);
-        return ApiResponse.onSuccess("Character image regeneration has been started.");
+        characterImageAdminService.createCharacterCandidate(
+                characterId,
+                CharacterImageCandidateRequestDTO.builder()
+                        .autoQa(true)
+                        .publishPolicy("MANUAL")
+                        .build()
+        );
+        return ApiResponse.onSuccess("Character image candidate generation has been started.");
     }
 }
