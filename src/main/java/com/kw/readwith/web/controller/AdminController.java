@@ -19,6 +19,7 @@ import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.service.AdminService;
 import com.kw.readwith.service.AnalysisInputExportService;
 import com.kw.readwith.service.CharacterImageAdminService;
+import com.kw.readwith.service.normalization.NormalizationJobDispatcher;
 import com.kw.readwith.service.normalization.NormalizationJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,6 +51,7 @@ public class AdminController {
     private final AnalysisInputExportService analysisInputExportService;
     private final NormalizationJobService normalizationJobService;
     private final CharacterImageAdminService characterImageAdminService;
+    private final NormalizationJobDispatcher normalizationJobDispatcher;
 
     @Operation(summary = "모든 도서 전체 정보 조회", description = "book 테이블의 모든 행들의 모든 칼럼값들을 조회합니다. (관리자용)")
     @GetMapping("/books")
@@ -62,6 +64,23 @@ public class AdminController {
     @GetMapping("/normalization/jobs/latest")
     public ApiResponse<List<NormalizationJobResponseDTO>> getRecentNormalizationJobs() {
         List<NormalizationJobResponseDTO> response = normalizationJobService.getRecentNormalizationJobs();
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(
+            summary = "실패한 정규화 Job 재시도",
+            description = "ID를 이용해 실패한 정규화 작업을 찾아, 동일한 설정으로 새로운 작업을 생성하여 재시도합니다."
+    )
+    @PostMapping("/normalization/jobs/{jobId}/retry")
+    public ApiResponse<NormalizationJobResponseDTO> retryNormalizationJob(
+            @Parameter(description = "재시도할 정규화 Job ID", required = true) @PathVariable Long jobId) {
+        
+        NormalizationJobResponseDTO response = normalizationJobService.retryFailedJob(jobId);
+        
+        // 새로운 작업이 생성되고 트랜잭션이 커밋된 후(Controller 레이어),
+        // 해당 작업을 처리할 Dispatcher를 호출하여 비동기로 실행되게 합니다.
+        normalizationJobDispatcher.dispatch(response.getId());
+
         return ApiResponse.onSuccess(response);
     }
 
