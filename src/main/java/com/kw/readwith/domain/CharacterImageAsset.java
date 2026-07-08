@@ -60,6 +60,9 @@ public class CharacterImageAsset extends BaseEntity {
     @Builder.Default
     private int referenceVersion = 0;
 
+    @Column(name = "slot_no")
+    private Integer slotNo;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 30, nullable = false)
     private CharacterImageAssetStatus status;
@@ -134,5 +137,43 @@ public class CharacterImageAsset extends BaseEntity {
 
     public void markSuperseded() {
         this.status = CharacterImageAssetStatus.SUPERSEDED;
+    }
+
+    public void beginReferenceCandidate(Character referenceCharacter, int slotNo) {
+        this.character = referenceCharacter;
+        this.assetRole = CharacterImageAssetRole.REFERENCE_CANDIDATE;
+        this.generationMode = CharacterImageGenerationMode.TEXT_TO_IMAGE;
+        this.sourceReferenceAsset = null;
+        this.referenceVersion = 0;
+        this.slotNo = slotNo;
+        this.status = CharacterImageAssetStatus.GENERATING;
+        this.s3Url = null;
+        this.model = null;
+        this.promptHash = null;
+        this.qaResultJson = null;
+        this.failureCode = null;
+        this.openaiRequestId = null;
+        this.publishedAt = null;
+        this.attemptNo += 1;
+    }
+
+    public void beginCharacterImage(Character targetCharacter,
+                                    CharacterImageAsset sourceReferenceAsset,
+                                    int referenceVersion) {
+        this.character = targetCharacter;
+        this.assetRole = CharacterImageAssetRole.CHARACTER_IMAGE;
+        this.generationMode = CharacterImageGenerationMode.REFERENCE_EDIT;
+        this.sourceReferenceAsset = sourceReferenceAsset;
+        this.referenceVersion = referenceVersion;
+        this.slotNo = null;
+        this.status = CharacterImageAssetStatus.GENERATING;
+        this.s3Url = null;
+        this.model = null;
+        this.promptHash = null;
+        this.qaResultJson = null;
+        this.failureCode = null;
+        this.openaiRequestId = null;
+        this.publishedAt = null;
+        this.attemptNo += 1;
     }
 }

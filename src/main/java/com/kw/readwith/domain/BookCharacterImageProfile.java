@@ -79,6 +79,21 @@ public class BookCharacterImageProfile extends BaseEntity {
         this.bookPromptHash = bookPromptHash;
     }
 
+    public void markReferenceCandidatesGenerating(Character referenceCharacter, String model,
+                                                  String baseStylePromptHash, String bookPromptHash) {
+        this.activeReferenceAsset = null;
+        this.referenceCharacter = referenceCharacter;
+        this.referenceStatus = BookImageReferenceStatus.CANDIDATE_GENERATING;
+        this.model = model;
+        this.baseStylePromptHash = baseStylePromptHash;
+        this.bookPromptHash = bookPromptHash;
+    }
+
+    public void markReferenceCandidatesReady(Character referenceCharacter) {
+        this.referenceCharacter = referenceCharacter;
+        this.referenceStatus = BookImageReferenceStatus.QA_PASSED;
+    }
+
     public void markQaPassed(CharacterImageAsset candidate) {
         this.activeReferenceAsset = candidate;
         this.referenceCharacter = candidate.getCharacter();
@@ -98,6 +113,10 @@ public class BookCharacterImageProfile extends BaseEntity {
         this.model = candidate.getModel();
         this.approvedAt = LocalDateTime.now();
         this.approvedBy = approvedBy;
+    }
+
+    public void selectReferenceCandidate(CharacterImageAsset candidate, String approvedBy) {
+        approve(candidate, approvedBy);
     }
 
     public void reject() {

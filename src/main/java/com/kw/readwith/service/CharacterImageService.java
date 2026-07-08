@@ -218,6 +218,13 @@ public class CharacterImageService {
                 UUID.randomUUID());
     }
 
+    public String buildReferenceCandidateSlotS3KeyName(Character character, int slotNo) {
+        return String.format("%s/%d/reference/slot-%d.png",
+                imageProperties.getS3Path(),
+                character.getBook().getId(),
+                slotNo);
+    }
+
     public String buildCandidateS3KeyName(Character character, Long assetId) {
         return String.format("%s/%d/%d/candidates/%d-%s.png",
                 imageProperties.getS3Path(),
@@ -364,7 +371,7 @@ public class CharacterImageService {
         }
     }
 
-    private String buildPublishedS3KeyName(Character character) {
+    public String buildPublishedS3KeyName(Character character) {
         return String.format("%s/%d/%d.png",
                 imageProperties.getS3Path(),
                 character.getBook().getId(),
