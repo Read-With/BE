@@ -2,6 +2,8 @@ package com.kw.readwith.service;
 
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.aws.s3.AmazonS3Manager;
+import com.kw.readwith.config.ArtifactStorageProperties;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.enums.ProcessingJobLogLevel;
 import com.kw.readwith.domain.enums.ProcessingJobStatus;
@@ -26,11 +28,6 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -39,7 +36,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -55,6 +51,8 @@ public class RelationshipDeltaImportJobService {
     private final ProcessingJobLogRepository processingJobLogRepository;
     private final AdminService adminService;
     private final BookAnalysisStatusService bookAnalysisStatusService;
+    private final AmazonS3Manager amazonS3Manager;
+    private final ArtifactStorageProperties artifactStorageProperties;
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
 
@@ -76,14 +74,17 @@ public class RelationshipDeltaImportJobService {
                     throw new GeneralException(ErrorStatus._BAD_REQUEST, "An AI analysis job is already active for this book.");
                 });
 
-        Path workspace = prepareWorkspace(bookId, files);
+        String runId = "relationship-delta-" + UUID.randomUUID();
+        String artifactRoot = buildArtifactRoot(bookId, runId);
+        S3StagingResult stagingResult = stageFiles(artifactRoot, files);
+
         try {
             ProcessingJob job = ProcessingJob.builder()
                     .book(book)
                     .pipelineType(ProcessingPipelineType.AI_ANALYSIS)
-                    .runId("relationship-delta-" + UUID.randomUUID())
+                    .runId(runId)
                     .sourceVersion(SOURCE_VERSION)
-                    .artifactPath(workspace.toString())
+                    .artifactPath(artifactRoot)
                     .status(ProcessingJobStatus.QUEUED)
                     .currentStep("queued")
                     .triggeredBy(TRIGGERED_BY)
@@ -91,12 +92,13 @@ public class RelationshipDeltaImportJobService {
 
             ProcessingJob savedJob = processingJobRepository.save(job);
             writeLog(savedJob, ProcessingJobLogLevel.INFO, "queued", "Relationship delta import job has been queued.", Map.of(
-                    "fileCount", countRegularFiles(workspace),
-                    "workspace", workspace.toString()
+                    "fileCount", stagingResult.fileCount(),
+                    "artifactRoot", artifactRoot,
+                    "inputPrefix", privateKey(inputPrefix(artifactRoot))
             ));
             return ProcessingJobResponseDTO.from(savedJob);
         } catch (RuntimeException e) {
-            cleanupWorkspace(workspace);
+            cleanupStagedFiles(artifactRoot);
             throw e;
         }
     }
@@ -126,61 +128,59 @@ public class RelationshipDeltaImportJobService {
     }
 
     public void execute(Long jobId) {
-        Path workspace = null;
         try {
             RelationshipDeltaExecutionContext context = transitionToProcessing(jobId);
-            workspace = Path.of(context.workspace());
-            int processedFileCount = processWorkspace(jobId, context.bookId(), workspace);
+            int processedFileCount = processArtifactRoot(jobId, context.bookId(), context.artifactRoot());
             completeSuccess(jobId, processedFileCount);
         } catch (Exception e) {
             log.error("Relationship delta import job failed. jobId={}", jobId, e);
             completeFailure(jobId, e);
-        } finally {
-            if (workspace != null) {
-                cleanupWorkspace(workspace);
-            }
         }
     }
 
-    private Path prepareWorkspace(Long bookId, List<MultipartFile> files) {
-        try {
-            Path workspace = Files.createTempDirectory("readwith-relationship-delta-" + bookId + "-");
-            int storedCount = 0;
-            for (int i = 0; i < files.size(); i++) {
-                MultipartFile file = files.get(i);
-                if (file == null || file.isEmpty()) {
-                    continue;
-                }
-                Path target = workspace.resolve(safeFileName(file.getOriginalFilename(), i + 1));
-                try (InputStream inputStream = file.getInputStream()) {
-                    Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-                storedCount++;
+    private S3StagingResult stageFiles(String artifactRoot, List<MultipartFile> files) {
+        int storedCount = 0;
+
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            if (file == null || file.isEmpty()) {
+                continue;
             }
 
-            if (storedCount == 0) {
-                cleanupWorkspace(workspace);
-                throw new GeneralException(ErrorStatus._BAD_REQUEST, "No non-empty relationship delta files provided.");
+            String key = privateKey(inputPrefix(artifactRoot) + "/" + safeFileName(file.getOriginalFilename(), i + 1));
+            try {
+                amazonS3Manager.uploadFile(key, file);
+            } catch (RuntimeException e) {
+                cleanupStagedFiles(artifactRoot);
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to stage relationship delta files to S3.");
             }
-            return workspace;
-        } catch (IOException e) {
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to stage relationship delta files.");
+            storedCount++;
         }
+
+        if (storedCount == 0) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "No non-empty relationship delta files provided.");
+        }
+        return new S3StagingResult(artifactRoot, storedCount);
     }
 
-    private int processWorkspace(Long jobId, Long bookId, Path workspace) {
-        List<Path> files = listWorkspaceFiles(workspace);
+    private int processArtifactRoot(Long jobId, Long bookId, String artifactRoot) {
+        List<String> keys = listStagedInputKeys(artifactRoot);
+        if (keys.isEmpty()) {
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Relationship delta staged input files are missing.");
+        }
+
         Set<String> seenEventIds = new HashSet<>();
         int processedFileCount = 0;
 
-        for (Path file : files) {
+        for (String key : keys) {
+            String fileName = fileNameFromKey(key);
             advanceStep(jobId, "processing_file", "Processing relationship delta file.", Map.of(
-                    "fileName", file.getFileName().toString(),
+                    "fileName", fileName,
                     "processedFileCount", processedFileCount
             ));
 
-            RelationshipUploadDTO dto = readRelationshipDeltaFile(file);
-            String eventKey = resolveEventKey(dto, file);
+            RelationshipUploadDTO dto = readRelationshipDeltaFile(key, fileName);
+            String eventKey = resolveEventKey(dto, fileName);
             if (!seenEventIds.add(eventKey)) {
                 throw new GeneralException(ErrorStatus._BAD_REQUEST, "Duplicate relationship delta eventId in job: " + eventKey);
             }
@@ -188,7 +188,7 @@ public class RelationshipDeltaImportJobService {
             int savedCount = adminService.replaceRelationshipDeltaPayload(bookId, dto, false);
             processedFileCount++;
             writeLogInNewTransaction(jobId, ProcessingJobLogLevel.INFO, "file_processed", "Relationship delta file has been imported.", Map.of(
-                    "fileName", file.getFileName().toString(),
+                    "fileName", fileName,
                     "eventId", eventKey,
                     "savedCount", savedCount,
                     "processedFileCount", processedFileCount
@@ -198,11 +198,13 @@ public class RelationshipDeltaImportJobService {
         return processedFileCount;
     }
 
-    private RelationshipUploadDTO readRelationshipDeltaFile(Path file) {
-        try (InputStream inputStream = Files.newInputStream(file)) {
-            return objectMapper.readValue(inputStream, RelationshipUploadDTO.class);
+    private RelationshipUploadDTO readRelationshipDeltaFile(String key, String fileName) {
+        try {
+            return amazonS3Manager.readObject(key, inputStream -> objectMapper.readValue(inputStream, RelationshipUploadDTO.class));
         } catch (IOException e) {
-            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship delta JSON: " + file.getFileName());
+            throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship delta JSON: " + fileName);
+        } catch (RuntimeException e) {
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to read staged relationship delta file: " + fileName);
         }
     }
 
@@ -213,14 +215,15 @@ public class RelationshipDeltaImportJobService {
                 throw new GeneralException(ErrorStatus._BAD_REQUEST, "Relationship delta import job is not queued.");
             }
             if (job.getArtifactPath() == null || job.getArtifactPath().isBlank()) {
-                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Relationship delta import workspace is missing.");
+                throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Relationship delta import artifact root is missing.");
             }
 
             job.markProcessing("processing_files");
             job.getBook().resetAnalysisStatus();
             writeLog(job, ProcessingJobLogLevel.INFO, "processing_files", "Relationship delta import has started.", Map.of(
                     "runId", job.getRunId(),
-                    "workspace", job.getArtifactPath()
+                    "artifactRoot", job.getArtifactPath(),
+                    "inputPrefix", privateKey(inputPrefix(job.getArtifactPath()))
             ));
 
             return new RelationshipDeltaExecutionContext(job.getBook().getId(), job.getArtifactPath());
@@ -242,6 +245,7 @@ public class RelationshipDeltaImportJobService {
             job.markReady(job.getArtifactPath(), "completed");
             writeLog(job, ProcessingJobLogLevel.INFO, "completed", "Relationship delta import job completed.", Map.of(
                     "runId", job.getRunId(),
+                    "artifactRoot", job.getArtifactPath(),
                     "processedFileCount", processedFileCount
             ));
         });
@@ -258,6 +262,7 @@ public class RelationshipDeltaImportJobService {
                 job.markFailed(currentStep, resolveFailureCode(e), failureMessage);
                 writeLog(job, ProcessingJobLogLevel.ERROR, currentStep, "Relationship delta import job failed.", Map.of(
                         "runId", job.getRunId(),
+                        "artifactRoot", job.getArtifactPath(),
                         "failureCode", resolveFailureCode(e),
                         "error", failureMessage
                 ));
@@ -312,22 +317,22 @@ public class RelationshipDeltaImportJobService {
         }
     }
 
-    private List<Path> listWorkspaceFiles(Path workspace) {
-        try (Stream<Path> stream = Files.list(workspace)) {
-            return stream
-                    .filter(Files::isRegularFile)
+    private List<String> listStagedInputKeys(String artifactRoot) {
+        try {
+            return amazonS3Manager.listKeys(privateKey(inputPrefix(artifactRoot))).stream()
+                    .filter(key -> !key.endsWith("/"))
                     .sorted()
                     .toList();
-        } catch (IOException e) {
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to list relationship delta workspace files.");
+        } catch (RuntimeException e) {
+            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to list staged relationship delta files.");
         }
     }
 
-    private int countRegularFiles(Path workspace) {
-        try (Stream<Path> stream = Files.list(workspace)) {
-            return (int) stream.filter(Files::isRegularFile).count();
-        } catch (IOException e) {
-            throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "Failed to count relationship delta workspace files.");
+    private void cleanupStagedFiles(String artifactRoot) {
+        try {
+            amazonS3Manager.deleteKeys(listStagedInputKeys(artifactRoot));
+        } catch (RuntimeException e) {
+            log.warn("Failed to clean staged relationship delta files. artifactRoot={}", artifactRoot, e);
         }
     }
 
@@ -346,9 +351,9 @@ public class RelationshipDeltaImportJobService {
         return String.format("%04d-%s", index, name);
     }
 
-    private String resolveEventKey(RelationshipUploadDTO dto, Path file) {
+    private String resolveEventKey(RelationshipUploadDTO dto, String fileName) {
         if (dto == null || dto.getChapterIndex() == null || dto.getEventId() == null || dto.getEventId().isBlank()) {
-            return file.getFileName().toString();
+            return fileName;
         }
 
         String eventId = dto.getEventId().trim();
@@ -362,22 +367,35 @@ public class RelationshipDeltaImportJobService {
         return "ch" + dto.getChapterIndex() + "-" + eventId;
     }
 
-    private void cleanupWorkspace(Path workspace) {
-        if (workspace == null || !Files.exists(workspace)) {
-            return;
+    private String fileNameFromKey(String key) {
+        int slashIndex = key.lastIndexOf('/');
+        return slashIndex >= 0 ? key.substring(slashIndex + 1) : key;
+    }
+
+    private String buildArtifactRoot(Long bookId, String runId) {
+        return "books/" + bookId + "/analysis/relationship-delta-jobs/" + runId;
+    }
+
+    private String inputPrefix(String artifactRoot) {
+        return artifactRoot + "/input";
+    }
+
+    private String privateKey(String relativePath) {
+        return trimSlashes(artifactStorageProperties.getPrivatePrefix()) + "/" + trimLeadingSlash(relativePath);
+    }
+
+    private String trimSlashes(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
         }
-        try (Stream<Path> stream = Files.walk(workspace)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException e) {
-                            log.warn("Failed to clean relationship delta workspace path={}", path, e);
-                        }
-                    });
-        } catch (IOException e) {
-            log.warn("Failed to walk relationship delta workspace. path={}", workspace, e);
+        return value.replaceAll("^/+|/+$", "");
+    }
+
+    private String trimLeadingSlash(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
         }
+        return value.replaceAll("^/+", "");
     }
 
     private String resolveFailureCode(Exception exception) {
@@ -393,6 +411,9 @@ public class RelationshipDeltaImportJobService {
         return transactionTemplate;
     }
 
-    private record RelationshipDeltaExecutionContext(Long bookId, String workspace) {
+    private record S3StagingResult(String artifactRoot, int fileCount) {
+    }
+
+    private record RelationshipDeltaExecutionContext(Long bookId, String artifactRoot) {
     }
 }

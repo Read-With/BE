@@ -1,6 +1,8 @@
 package com.kw.readwith.service;
 
 import com.kw.readwith.apiPayload.exception.GeneralException;
+import com.kw.readwith.aws.s3.AmazonS3Manager;
+import com.kw.readwith.config.ArtifactStorageProperties;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.enums.ProcessingJobLogLevel;
 import com.kw.readwith.domain.enums.ProcessingJobStatus;
@@ -20,12 +22,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,10 +51,13 @@ class RelationshipDeltaImportJobServiceTest {
     private BookAnalysisStatusService bookAnalysisStatusService;
 
     @Mock
+    private AmazonS3Manager amazonS3Manager;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     @Test
-    void queueRelationshipDeltaImportStagesFilesAndCreatesAnalysisJob() throws IOException {
+    void queueRelationshipDeltaImportStagesFilesToS3AndCreatesAnalysisJob() {
         Book book = Book.builder()
                 .title("The Great Gatsby")
                 .author("F. Scott Fitzgerald")
@@ -90,26 +90,25 @@ class RelationshipDeltaImportJobServiceTest {
 
         ArgumentCaptor<ProcessingJob> jobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
         ArgumentCaptor<ProcessingJobLog> logCaptor = ArgumentCaptor.forClass(ProcessingJobLog.class);
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(processingJobRepository).save(jobCaptor.capture());
         verify(processingJobLogRepository).save(logCaptor.capture());
+        verify(amazonS3Manager).uploadFile(keyCaptor.capture(), eq(file));
 
         ProcessingJob savedJob = jobCaptor.getValue();
-        Path workspace = Path.of(savedJob.getArtifactPath());
-        try {
-            assertThat(response.getId()).isEqualTo(137L);
-            assertThat(savedJob.getPipelineType()).isEqualTo(ProcessingPipelineType.AI_ANALYSIS);
-            assertThat(savedJob.getStatus()).isEqualTo(ProcessingJobStatus.QUEUED);
-            assertThat(savedJob.getCurrentStep()).isEqualTo("queued");
-            assertThat(savedJob.getSourceVersion()).isEqualTo("relationship-delta-v1");
-            assertThat(savedJob.getRunId()).startsWith("relationship-delta-");
-            try (Stream<Path> stagedFiles = Files.list(workspace)) {
-                assertThat(stagedFiles).hasSize(1);
-            }
-            assertThat(logCaptor.getValue().getLevel()).isEqualTo(ProcessingJobLogLevel.INFO);
-            assertThat(logCaptor.getValue().getStep()).isEqualTo("queued");
-        } finally {
-            cleanup(workspace);
-        }
+        assertThat(response.getId()).isEqualTo(137L);
+        assertThat(savedJob.getPipelineType()).isEqualTo(ProcessingPipelineType.AI_ANALYSIS);
+        assertThat(savedJob.getStatus()).isEqualTo(ProcessingJobStatus.QUEUED);
+        assertThat(savedJob.getCurrentStep()).isEqualTo("queued");
+        assertThat(savedJob.getSourceVersion()).isEqualTo("relationship-delta-v1");
+        assertThat(savedJob.getRunId()).startsWith("relationship-delta-");
+        assertThat(savedJob.getArtifactPath())
+                .isEqualTo("books/17/analysis/relationship-delta-jobs/" + savedJob.getRunId());
+        assertThat(keyCaptor.getValue())
+                .isEqualTo("private/" + savedJob.getArtifactPath() + "/input/0001-chapter1_event1.json");
+        assertThat(logCaptor.getValue().getLevel()).isEqualTo(ProcessingJobLogLevel.INFO);
+        assertThat(logCaptor.getValue().getStep()).isEqualTo("queued");
+        assertThat(logCaptor.getValue().getPayloadJson()).contains(savedJob.getArtifactPath());
     }
 
     @Test
@@ -137,31 +136,22 @@ class RelationshipDeltaImportJobServiceTest {
                 .isInstanceOf(GeneralException.class)
                 .hasMessageContaining("already active");
         verify(processingJobRepository, never()).save(any());
+        verify(amazonS3Manager, never()).uploadFile(any(), any());
     }
 
     private RelationshipDeltaImportJobService newService() {
+        ArtifactStorageProperties artifactStorageProperties = new ArtifactStorageProperties();
+        artifactStorageProperties.setPrivatePrefix("private");
         return new RelationshipDeltaImportJobService(
                 bookRepository,
                 processingJobRepository,
                 processingJobLogRepository,
                 adminService,
                 bookAnalysisStatusService,
+                amazonS3Manager,
+                artifactStorageProperties,
                 new ObjectMapper(),
                 transactionManager
         );
-    }
-
-    private void cleanup(Path path) throws IOException {
-        if (path == null || !Files.exists(path)) {
-            return;
-        }
-        try (Stream<Path> stream = Files.walk(path)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(candidate -> {
-                try {
-                    Files.deleteIfExists(candidate);
-                } catch (IOException ignored) {
-                }
-            });
-        }
     }
 }

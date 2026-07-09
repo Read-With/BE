@@ -3,8 +3,11 @@ package com.kw.readwith.aws.s3;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.HttpMethod;
+import com.amazonaws.services.s3.model.ListObjectsV2Request;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
 import com.kw.readwith.config.AmazonConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,8 +18,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -56,6 +61,36 @@ public class AmazonS3Manager {
         } catch (IOException e) {
             throw new IllegalStateException("S3 파일 다운로드에 실패했습니다. key=" + keyName, e);
         }
+    }
+
+    public <T> T readObject(String keyName, S3ObjectReader<T> reader) throws IOException {
+        try (S3Object object = amazonS3.getObject(amazonConfig.getBucket(), keyName);
+             InputStream inputStream = object.getObjectContent()) {
+            return reader.read(inputStream);
+        }
+    }
+
+    public List<String> listKeys(String prefix) {
+        List<String> keys = new ArrayList<>();
+        ListObjectsV2Request request = new ListObjectsV2Request()
+                .withBucketName(amazonConfig.getBucket())
+                .withPrefix(prefix);
+
+        ListObjectsV2Result result;
+        do {
+            result = amazonS3.listObjectsV2(request);
+            result.getObjectSummaries().forEach(summary -> keys.add(summary.getKey()));
+            request.setContinuationToken(result.getNextContinuationToken());
+        } while (result.isTruncated());
+
+        return keys;
+    }
+
+    public void deleteKeys(List<String> keyNames) {
+        if (keyNames == null || keyNames.isEmpty()) {
+            return;
+        }
+        keyNames.forEach(keyName -> amazonS3.deleteObject(amazonConfig.getBucket(), keyName));
     }
 
     public String getObjectUrl(String keyName) {
@@ -117,5 +152,10 @@ public class AmazonS3Manager {
             ext = originalFilename.substring(idx);
         }
         return UUID.randomUUID() + ext;
+    }
+
+    @FunctionalInterface
+    public interface S3ObjectReader<T> {
+        T read(InputStream inputStream) throws IOException;
     }
 }
