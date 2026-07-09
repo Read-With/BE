@@ -172,16 +172,16 @@ public class CharacterImageService {
     }
 
     private OpenAiImageOptions buildImageOptions() {
-        OpenAiImageOptions.Builder builder = OpenAiImageOptions.builder()
-                .withModel(resolveImageModel())
-                .withQuality(resolveImageQuality())
-                .withN(positiveOrDefault(imageProperties.getCount(), 1))
-                .withHeight(positiveOrDefault(imageProperties.getHeight(), 1024))
-                .withWidth(positiveOrDefault(imageProperties.getWidth(), 1024));
+        OpenAiImageOptions.Builder builder = OpenAiImageOptions.builder();
+        builder.model(resolveImageModel());
+        builder.quality(resolveImageQuality());
+        builder.n(positiveOrDefault(imageProperties.getCount(), 1));
+        builder.height(positiveOrDefault(imageProperties.getHeight(), 1024));
+        builder.width(positiveOrDefault(imageProperties.getWidth(), 1024));
 
         String responseFormat = normalizePromptSegment(imageProperties.getResponseFormat());
         if (responseFormat != null) {
-            builder.withResponseFormat(responseFormat);
+            builder.responseFormat(responseFormat);
         }
 
         return builder.build();

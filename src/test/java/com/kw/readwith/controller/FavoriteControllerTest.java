@@ -1,10 +1,6 @@
 package com.kw.readwith.controller;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.domain.User;
-import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.UserRepository;
 import com.kw.readwith.util.JwtUtil;
@@ -12,14 +8,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.util.List;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -71,11 +68,7 @@ class FavoriteControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andReturn();
-        List<BookSummaryDTO> list = objectMapper.readValue(
-                readResult(listResult).traverse(),
-                new TypeReference<>() {}
-        );
-        assertThat(list).extracting(BookSummaryDTO::getId).contains(existingBookId);
+        assertThat(containsBookId(readResult(listResult), existingBookId)).isTrue();
 
         // 3. 즐겨찾기 삭제
         mockMvc.perform(delete("/api/favorites/" + existingBookId)
@@ -88,16 +81,21 @@ class FavoriteControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andReturn();
-        List<BookSummaryDTO> list2 = objectMapper.readValue(
-                readResult(listResult2).traverse(),
-                new TypeReference<>() {}
-        );
-        assertThat(list2).extracting(BookSummaryDTO::getId).doesNotContain(existingBookId);
+        assertThat(containsBookId(readResult(listResult2), existingBookId)).isFalse();
     }
 
     private JsonNode readResult(MvcResult result) throws Exception {
         JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(root.path("isSuccess").asBoolean()).isTrue();
         return root.path("result");
+    }
+
+    private boolean containsBookId(JsonNode result, Long bookId) {
+        for (JsonNode item : result) {
+            if (item.path("id").asLong() == bookId) {
+                return true;
+            }
+        }
+        return false;
     }
 }

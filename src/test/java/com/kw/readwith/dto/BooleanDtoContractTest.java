@@ -1,7 +1,5 @@
 package com.kw.readwith.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.CharacterListDTO;
 import com.kw.readwith.dto.book.BookDetailDTO;
@@ -13,12 +11,15 @@ import com.kw.readwith.dto.manifest.BookManifestDTO;
 import com.kw.readwith.dto.manifest.CharacterManifestDTO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class BooleanDtoContractTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().findAndAddModules().build();
 
     @Test
     @DisplayName("character upload DTO accepts camelCase and legacy aliases for isMainCharacter")

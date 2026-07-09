@@ -1,12 +1,13 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.service.normalization.NormalizationPipelineResult;
 import com.kw.readwith.service.normalization.NormalizationPipelineService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,7 +26,7 @@ class GutenbergNormalizationRegressionTest {
     private static final Path REPORT_PATH = Path.of("build", "reports", "normalization", "gutenberg-regression-report.json");
     private static final int MAX_ALLOWED_CHAPTERS = 20;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().findAndAddModules().build();
     private final NormalizationPipelineService normalizationPipelineService =
             new NormalizationPipelineService(objectMapper);
 

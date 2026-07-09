@@ -1,23 +1,19 @@
 package com.kw.readwith.controller;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kw.readwith.dto.book.BookDetailDTO;
-import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.util.List;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -53,11 +49,9 @@ class BookControllerTest {
                 .andReturn();
 
         String responseJson = result.getResponse().getContentAsString();
-        List<BookSummaryDTO> list = objectMapper.readValue(
-                readResult(responseJson).traverse(),
-                new TypeReference<>() {}
-        );
-        assertThat(list).isNotEmpty();
+        JsonNode resultJson = readResult(responseJson);
+        assertThat(resultJson.isArray()).isTrue();
+        assertThat(resultJson.size()).isGreaterThan(0);
     }
 
     @Test
@@ -69,9 +63,9 @@ class BookControllerTest {
                 .andReturn();
 
         String responseJson = result.getResponse().getContentAsString();
-        BookDetailDTO dto = objectMapper.treeToValue(readResult(responseJson), BookDetailDTO.class);
-        assertThat(dto.getId()).isEqualTo(existingBookId);
-        assertThat(dto.getTitle()).isNotBlank();
+        JsonNode resultJson = readResult(responseJson);
+        assertThat(resultJson.path("id").asLong()).isEqualTo(existingBookId);
+        assertThat(resultJson.path("title").asText()).isNotBlank();
     }
 
     private JsonNode readResult(String responseJson) throws Exception {

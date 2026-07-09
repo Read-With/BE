@@ -1,6 +1,5 @@
 package com.kw.readwith.service.normalization;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.config.EpubNormalizationProperties;
 import com.kw.readwith.domain.Book;
@@ -22,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -301,7 +301,7 @@ public class NormalizationJobServiceTest {
         assertThat(response.getBookId()).isEqualTo(bookId);
         assertThat(response.getBookTitle()).isEqualTo("Book Title");
         assertThat(response.getPipelineType()).isEqualTo(ProcessingPipelineType.NORMALIZATION);
-        assertThat(response.getSourceVersion()).isEqualTo("src-v2");
+        assertThat(response.getSourceVersion()).isEqualTo("src-v1");
         assertThat(response.getArtifactPath()).isEqualTo("path/to/artifact");
         assertThat(response.getStatus()).isEqualTo(ProcessingJobStatus.READY);
         assertThat(response.getCurrentStep()).isEqualTo("completed");

@@ -1,7 +1,5 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.config.V2TransitionGuard;
@@ -27,6 +25,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -523,7 +523,7 @@ public class AdminService {
                         .interactionCount(dto.getEvidenceCount())
                         .relationTags(objectMapper.writeValueAsString(dto.getLabels()))
                         .build());
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR,
                         String.format("Failed to serialize relationship labels for %d -> %d", fromCharacterId, toCharacterId));
             }
@@ -703,7 +703,7 @@ public class AdminService {
                         .relationTags(objectMapper.writeValueAsString(dto.getLabels() != null ? dto.getLabels() : List.of()))
                         .build();
                 newEdges.add(edge);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR,
                         String.format("筌?Ŧ???%d??(?? %d???온????볥젃 筌ｌ꼶??餓???살첒揶쎛 獄쏆뮇源??됰뮸??덈뼄.", fromCharacterId, toCharacterId));
             }

@@ -1,6 +1,5 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
@@ -20,6 +19,7 @@ import com.kw.readwith.util.LocatorSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;

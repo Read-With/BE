@@ -1,15 +1,15 @@
 package com.kw.readwith.service.normalization;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.dto.common.LocatorDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -91,7 +91,7 @@ public class LocatorResolutionService {
     public String writeIntegerList(List<Integer> values) {
         try {
             return objectMapper.writeValueAsString(values);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "locator 메타 직렬화에 실패했습니다.");
         }
     }
@@ -137,7 +137,7 @@ public class LocatorResolutionService {
         }
         try {
             return objectMapper.readValue(json, new TypeReference<List<Integer>>() {});
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new GeneralException(ErrorStatus._BAD_REQUEST, fieldName + " 파싱에 실패했습니다.");
         }
     }

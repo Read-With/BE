@@ -1,83 +1,91 @@
-# Spring Boot 4.x Migration and Resource Reduction Plan
+# Spring Boot 4.x Migration and Resource Review
 
 Issue: https://github.com/Read-With/BE/issues/133
 
 ## Decision
 
-Do not downgrade this service to Spring Framework 4.x. The current codebase is
-already on Spring Boot 3.3.1, Java 17, and Jakarta APIs. Moving to Spring
-Framework 4.x would require a broad reverse migration from `jakarta.*` to
-`javax.*`, would remove current security support, and would not directly reduce
-runtime resource usage.
+Do not downgrade this service to Spring Framework 4.x. The codebase was already
+on Spring Boot 3.3.1, Java 17, and Jakarta APIs, so moving to Spring Framework
+4.x would be a reverse migration to older `javax.*` APIs and unsupported
+security/runtime baselines.
 
-The intended path is:
+This branch migrates the service to Spring Boot 4.x instead.
 
-1. Reduce deployable artifact size and legacy dependency weight first.
-2. Stabilize the current Spring Boot 3.x baseline.
-3. Upgrade to the latest Spring Boot 3.5.x line.
-4. Move to Spring Boot 4.x after dependency compatibility is clear.
+## Implemented Scope
 
-## Current Findings
+- Upgraded Spring Boot from `3.3.1` to `4.1.0`.
+- Upgraded the Gradle wrapper from `8.13` to `8.14.3`, which satisfies the
+  Spring Boot 4 Gradle baseline.
+- Upgraded Spring AI from `1.0.0-M3` to `2.0.0`.
+- Switched the OpenAI starter from
+  `spring-ai-openai-spring-boot-starter` to
+  `spring-ai-starter-model-openai`.
+- Upgraded `springdoc-openapi-starter-webmvc-ui` from `2.3.0` to `3.0.3`.
+- Added `spring-boot-starter-webmvc-test` and updated `@AutoConfigureMockMvc`
+  imports for Boot 4 test packages.
+- Migrated application `ObjectMapper` injection and JSON helpers from Jackson 2
+  databind types to Boot 4's Jackson 3 `tools.jackson.*` types.
+- Updated Spring AI image option builder calls for the Spring AI 2.0 API.
+- Removed production runtime H2 and the unused legacy Spring Cloud AWS starter
+  in the earlier commit on this branch.
 
-- `bootJar -x test` produced a jar of about 156.83 MB.
-- `BOOT-INF/classes/static` accounts for about 66.32 MB.
-- `BOOT-INF/lib` accounts for about 90.88 MB.
-- EPUB and JSON sample assets under `src/main/resources/static` are bundled into
-  the production jar.
-- `spring-cloud-starter-aws:2.2.6.RELEASE` pulls in Spring Boot 2 / Spring
-  Framework 5 era auto-configuration while the application configures
-  `AmazonS3` directly through AWS SDK v1.
-- H2 was present on the production runtime classpath even though it is only
-  needed by tests.
+## Resource Findings
 
-## First PR Scope
+Spring Boot 4 does not reduce this service's deployable size by itself.
 
-- Remove H2 from the production runtime classpath.
-- Remove the unused legacy Spring Cloud AWS starter.
-- Keep `aws-java-sdk-s3` because `AmazonConfig` and `AmazonS3Manager` still use
-  the AWS SDK v1 S3 client directly.
-- Document the migration risk and follow-up plan.
+- Initial Boot 3.3.1 jar before dependency cleanup: about `156.83 MB`.
+- After removing production H2 and legacy Spring Cloud AWS: about `147.83 MB`.
+- After the Boot 4.1.0 migration: about `209.73 MB`.
 
-## First PR Measurements
+Current Boot 4 jar breakdown:
 
-- Production jar size changed from about 156.83 MB to about 147.83 MB.
-- `BOOT-INF/lib` changed from about 90.88 MB to about 81.88 MB.
-- `BOOT-INF/classes/static` remains about 66.32 MB and is the next major
-  reduction target.
-- `dependencyInsight` confirms `spring-cloud-starter-aws` is no longer on the
-  runtime classpath.
-- `bootJar -x test` passes.
-- `test` still fails with test class loading errors that predate the framework
-  migration work and should be fixed before Boot 3.5 or Boot 4 upgrades.
+| Group | Size | Count |
+| --- | ---: | ---: |
+| `BOOT-INF/lib` | `143.75 MB` | `190` |
+| `BOOT-INF/classes/static` | `66.32 MB` | `452` |
+| `BOOT-INF/classes` | `1.32 MB` | `359` |
+| other | `0.39 MB` | `123` |
 
-## Follow-up Work
+The main size drivers are now library weight and bundled static assets. Boot 4
+also brings Jackson 3 while some third-party libraries still pull Jackson 2, so
+both Jackson generations are present on the runtime classpath.
 
-1. Fix local and CI test baseline before framework upgrades.
-   - `clean test` currently fails with test class loading errors.
-   - `JAVA_HOME` must point to a JDK root, not a nested runtime directory.
+## Validation
 
-2. Split sample assets from production packaging.
-   - Move bundled EPUB and upload fixtures to test fixtures, object storage, or a
-     seed-data package.
-   - Validate any endpoint or loader that expects files under `/static`.
+Validated locally with Java 17, matching Dockerfile and dev GitHub Actions:
 
-3. Upgrade within Spring Boot 3 first.
-   - Move from 3.3.1 to the latest 3.5.x patch line.
-   - Clear deprecations and configuration warnings.
+- `./gradlew compileJava --no-daemon`
+- `./gradlew compileTestJava --no-daemon`
+- `./gradlew test --no-daemon`
+- `./gradlew clean build -x test --no-daemon`
 
-4. Prepare for Spring Boot 4.x.
-   - Upgrade Gradle wrapper to a Boot 4 compatible version.
-   - Verify Spring AI compatibility and move off milestone dependencies.
-   - Either migrate S3 usage to AWS SDK v2 or a Spring Cloud AWS version that
-     supports Boot 4.x.
-   - Use `spring-boot-properties-migrator` only temporarily during the upgrade.
+All commands pass.
 
-## Validation Targets
+## Deployment Notes
 
-- Jar and container image size.
-- Cold start time and idle RSS.
-- S3 upload/download flows.
-- JWT and OAuth login flows.
+Merging this branch to `dev` and deploying the resulting `dev` build will deploy
+Spring Boot `4.1.0`. If deployment fails, roll back by reverting the merge commit
+or redeploying the previous known-good `dev` revision.
+
+Specific smoke checks after deploy:
+
+- Application boot and health/log startup.
+- JWT authenticated endpoints.
+- OAuth login flow.
+- Book list/detail endpoints.
+- Favorite endpoints.
+- Graph endpoints.
 - Admin upload and image generation flows.
-- Flyway validation.
-- Main API smoke tests.
+- S3 upload/download flows.
+- Flyway migration and validation.
+
+## Follow-up Resource Work
+
+1. Split bundled EPUB/upload/sample assets out of the production jar.
+   `BOOT-INF/classes/static` is still about `66 MB`.
+2. Review Spring AI/OpenAI dependency footprint. The new starter pulls webclient,
+   restclient, reactor, Netty, Kotlin, and OpenAI client dependencies.
+3. Consider migrating S3 usage from AWS SDK v1 to AWS SDK v2 if image size and
+   dependency hygiene matter for the deployment target.
+4. Keep an eye on third-party Jackson 2 dependencies while the app code now uses
+   Boot 4/Jackson 3 types.
