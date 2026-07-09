@@ -406,28 +406,11 @@ public class AdminService {
 
                 try {
                     RelationshipUploadDTO dto = objectMapper.readValue(file.getInputStream(), RelationshipUploadDTO.class);
-                    if (dto == null || dto.getChapterIndex() == null) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship delta payload chapterIndex is required.");
+                    RelationshipDeltaCandidate candidate = resolveRelationshipDeltaCandidate(bookId, book, dto);
+                    if (candidatesByEventId.containsKey(candidate.eventId())) {
+                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "Duplicate relationship delta eventId in request: " + candidate.eventId());
                     }
-                    validateRelationshipDeltaContract(dto);
-
-                    String eventId = requireText(dto.getEventId(), "relationship.eventId");
-                    int chapterIdx = dto.getChapterIndex();
-                    int eventIdx = parseEventIdx(eventId, chapterIdx);
-
-                    Event event = eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)
-                            .orElseThrow(() -> new GeneralException(
-                                    ErrorStatus.EVENT_NOT_FOUND,
-                                    String.format("Event not found for book=%d chapter=%d event=%d", bookId, chapterIdx, eventIdx)
-                            ));
-
-                    String normalizedEventId = normalizeEventId(eventId, chapterIdx, eventIdx);
-                    if (candidatesByEventId.containsKey(normalizedEventId)) {
-                        throw new GeneralException(ErrorStatus._BAD_REQUEST, "Duplicate relationship delta eventId in request: " + normalizedEventId);
-                    }
-
-                    RelationshipDeltaCandidate candidate = buildRelationshipDeltaCandidate(event, book, dto);
-                    candidatesByEventId.put(normalizedEventId, candidate);
+                    candidatesByEventId.put(candidate.eventId(), candidate);
                 } catch (IOException e) {
                     throw new GeneralException(ErrorStatus.JSON_PARSING_ERROR, "Failed to parse relationship delta JSON: " + file.getOriginalFilename());
                 }
@@ -446,6 +429,45 @@ public class AdminService {
         }
     }
 
+    @Transactional
+    public int replaceRelationshipDeltaPayload(Long bookId, RelationshipUploadDTO dto, boolean refreshStatus) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        try {
+            RelationshipDeltaCandidate candidate = resolveRelationshipDeltaCandidate(bookId, book, dto);
+            replaceRelationshipDelta(candidate.event());
+            int savedCount = saveRelationshipDelta(candidate);
+            if (refreshStatus) {
+                bookAnalysisStatusService.refreshStatus(bookId);
+            }
+            return savedCount;
+        } catch (GeneralException e) {
+            markAnalysisRejectedIfNeeded(book, e);
+            throw e;
+        }
+    }
+
+    private RelationshipDeltaCandidate resolveRelationshipDeltaCandidate(Long bookId, Book book, RelationshipUploadDTO dto) {
+        if (dto == null || dto.getChapterIndex() == null) {
+            throw new GeneralException(ErrorStatus._BAD_REQUEST, "relationship delta payload chapterIndex is required.");
+        }
+        validateRelationshipDeltaContract(dto);
+
+        String eventId = requireText(dto.getEventId(), "relationship.eventId");
+        int chapterIdx = dto.getChapterIndex();
+        int eventIdx = parseEventIdx(eventId, chapterIdx);
+
+        Event event = eventRepository.findByBookIdAndChapterIdxAndEventIdx(bookId, chapterIdx, eventIdx)
+                .orElseThrow(() -> new GeneralException(
+                        ErrorStatus.EVENT_NOT_FOUND,
+                        String.format("Event not found for book=%d chapter=%d event=%d", bookId, chapterIdx, eventIdx)
+                ));
+
+        String normalizedEventId = normalizeEventId(eventId, chapterIdx, eventIdx);
+        return buildRelationshipDeltaCandidate(normalizedEventId, event, book, dto);
+    }
+
     private void validateRelationshipDeltaContract(RelationshipUploadDTO dto) {
         String contractVersion = requireText(dto.getContractVersion(), "relationship.contractVersion");
         if (!RELATIONSHIP_DELTA_CONTRACT_VERSION.equals(contractVersion)) {
@@ -453,10 +475,10 @@ public class AdminService {
         }
     }
 
-    private RelationshipDeltaCandidate buildRelationshipDeltaCandidate(Event event, Book book, RelationshipUploadDTO dto) {
+    private RelationshipDeltaCandidate buildRelationshipDeltaCandidate(String eventId, Event event, Book book, RelationshipUploadDTO dto) {
         List<EventCharacterStat> stats = buildRelationshipNodeWeights(event, book, dto.getNodeWeights());
         List<EventRelationshipEdge> edges = buildRelationshipDeltaEdges(event, book, dto.getItems());
-        return new RelationshipDeltaCandidate(event, stats, edges);
+        return new RelationshipDeltaCandidate(eventId, event, stats, edges);
     }
 
     private List<EventCharacterStat> buildRelationshipNodeWeights(Event event, Book book, Map<String, NodeWeightDTO> nodeWeightsMap) {
@@ -572,6 +594,7 @@ public class AdminService {
     }
 
     private record RelationshipDeltaCandidate(
+            String eventId,
             Event event,
             List<EventCharacterStat> stats,
             List<EventRelationshipEdge> edges
