@@ -6,8 +6,11 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class SwaggerConfig {
@@ -33,5 +36,22 @@ public class SwaggerConfig {
                 .info(info)
                 .addSecurityItem(securityRequirement)
                 .components(components);
+    }
+
+    @Bean
+    public OpenApiCustomizer hideLegacyApiAliases() {
+        return openApi -> {
+            if (openApi.getPaths() == null) {
+                return;
+            }
+
+            List<String> legacyAliases = openApi.getPaths().keySet().stream()
+                    .filter(path -> path.startsWith("/api/"))
+                    .filter(path -> !path.startsWith("/api/v2/"))
+                    .filter(path -> openApi.getPaths().containsKey("/api/v2" + path.substring("/api".length())))
+                    .toList();
+
+            legacyAliases.forEach(openApi.getPaths()::remove);
+        };
     }
 }

@@ -8,16 +8,20 @@ import com.kw.readwith.dto.admin.BookAdminDetailDTO;
 import com.kw.readwith.dto.admin.CharacterDTO;
 import com.kw.readwith.dto.admin.NormalizationJobResponseDTO;
 import com.kw.readwith.dto.admin.ProcessingJobLogResponseDTO;
+import com.kw.readwith.dto.admin.ProcessingJobResponseDTO;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.service.AdminService;
 import com.kw.readwith.service.AnalysisInputExportService;
+import com.kw.readwith.service.RelationshipDeltaImportJobDispatcher;
+import com.kw.readwith.service.RelationshipDeltaImportJobService;
 import com.kw.readwith.service.normalization.NormalizationJobDispatcher;
 import com.kw.readwith.service.normalization.NormalizationJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,6 +45,8 @@ public class AdminController {
     private final AnalysisInputExportService analysisInputExportService;
     private final NormalizationJobService normalizationJobService;
     private final NormalizationJobDispatcher normalizationJobDispatcher;
+    private final RelationshipDeltaImportJobService relationshipDeltaImportJobService;
+    private final RelationshipDeltaImportJobDispatcher relationshipDeltaImportJobDispatcher;
 
     @Operation(summary = "모든 도서 전체 정보 조회", description = "book 테이블의 모든 행들의 모든 칼럼값들을 조회합니다. (관리자용)")
     @GetMapping("/books")
@@ -149,6 +156,36 @@ public class AdminController {
             @Parameter(description = "관계 delta JSON 파일 목록", required = true) @RequestParam("files") List<MultipartFile> files) {
         adminService.uploadRelationshipDeltas(bookId, files);
         return ApiResponse.onSuccess("Relationship deltas for the book have been successfully uploaded.");
+    }
+
+    @Operation(
+            summary = "Queue relationship delta import job",
+            description = "Stages relationship-delta-v1 files and imports them asynchronously one file at a time."
+    )
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @PostMapping(value = "/books/{bookId}/relationship-delta-jobs", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<ProcessingJobResponseDTO> queueRelationshipDeltaImportJob(
+            @Parameter(description = "Target book ID", required = true) @PathVariable Long bookId,
+            @Parameter(description = "relationship-delta-v1 JSON files", required = true) @RequestParam("files") List<MultipartFile> files) {
+        ProcessingJobResponseDTO response = relationshipDeltaImportJobService.queueRelationshipDeltaImport(bookId, files);
+        relationshipDeltaImportJobDispatcher.dispatch(response.getId());
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(summary = "Get relationship delta import job")
+    @GetMapping("/relationship-delta-jobs/{jobId}")
+    public ApiResponse<ProcessingJobResponseDTO> getRelationshipDeltaImportJob(
+            @Parameter(description = "Job ID", required = true) @PathVariable Long jobId) {
+        ProcessingJobResponseDTO response = relationshipDeltaImportJobService.getRelationshipDeltaImportJob(jobId);
+        return ApiResponse.onSuccess(response);
+    }
+
+    @Operation(summary = "Get relationship delta import job logs")
+    @GetMapping("/relationship-delta-jobs/{jobId}/logs")
+    public ApiResponse<List<ProcessingJobLogResponseDTO>> getRelationshipDeltaImportJobLogs(
+            @Parameter(description = "Job ID", required = true) @PathVariable Long jobId) {
+        List<ProcessingJobLogResponseDTO> response = relationshipDeltaImportJobService.getRelationshipDeltaImportJobLogs(jobId);
+        return ApiResponse.onSuccess(response);
     }
 
     @Operation(summary = "이벤트 관계 삭제", description = "특정 이벤트에 적재된 관계 edge와 node weight를 함께 삭제합니다.")

@@ -38,6 +38,7 @@ spring:
         order_updates: true
   servlet:
     multipart:
+      file-size-threshold: 0B
       max-file-size: 20MB
       max-request-size: 20MB
   security:
