@@ -1,6 +1,5 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
@@ -27,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;

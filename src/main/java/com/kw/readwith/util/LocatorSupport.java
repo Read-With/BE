@@ -1,7 +1,5 @@
 package com.kw.readwith.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Chapter;
@@ -9,6 +7,8 @@ import com.kw.readwith.dto.common.LocatorDTO;
 import com.kw.readwith.service.normalization.LocatorResolutionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 @RequiredArgsConstructor
@@ -23,7 +23,7 @@ public class LocatorSupport {
         }
         try {
             return objectMapper.writeValueAsString(locator);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "locator 직렬화에 실패했습니다.");
         }
     }
@@ -34,7 +34,7 @@ public class LocatorSupport {
         }
         try {
             return objectMapper.readValue(locatorJson, LocatorDTO.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new GeneralException(ErrorStatus._INTERNAL_SERVER_ERROR, "locator 역직렬화에 실패했습니다.");
         }
     }

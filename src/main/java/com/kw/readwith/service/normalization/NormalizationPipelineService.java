@@ -1,7 +1,5 @@
 package com.kw.readwith.service.normalization;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.domain.enums.NormalizationFailureCode;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
@@ -30,6 +28,8 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -398,7 +398,7 @@ public class NormalizationPipelineService {
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new NormalizationProcessingException(
                     NormalizationFailureCode.UNEXPECTED_FAILURE,
                     "serialize_metadata",

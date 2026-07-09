@@ -1,11 +1,12 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.domain.enums.NormalizationFailureCode;
 import com.kw.readwith.service.normalization.NormalizationPipelineService;
 import com.kw.readwith.service.normalization.NormalizationProcessingException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class NormalizationFailureCodeTest {
 
     private final NormalizationPipelineService normalizationPipelineService =
-            new NormalizationPipelineService(new ObjectMapper().findAndRegisterModules());
+            new NormalizationPipelineService(JsonMapper.builderWithJackson2Defaults().findAndAddModules().build());
 
     @Test
     @DisplayName("invalid epub archive produces invalid archive failure code")

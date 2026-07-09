@@ -1,6 +1,5 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.config.V2TransitionGuard;
@@ -23,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Optional;
 

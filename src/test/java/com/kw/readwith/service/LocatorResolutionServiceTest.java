@@ -1,6 +1,5 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.dto.common.LocatorDTO;
@@ -12,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import tools.jackson.databind.ObjectMapper;
 
 class LocatorResolutionServiceTest {
 

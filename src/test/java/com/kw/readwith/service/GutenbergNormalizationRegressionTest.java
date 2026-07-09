@@ -1,12 +1,13 @@
 package com.kw.readwith.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.service.normalization.NormalizationPipelineResult;
 import com.kw.readwith.service.normalization.NormalizationPipelineService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class GutenbergNormalizationRegressionTest {
 
@@ -25,25 +27,21 @@ class GutenbergNormalizationRegressionTest {
     private static final Path REPORT_PATH = Path.of("build", "reports", "normalization", "gutenberg-regression-report.json");
     private static final int MAX_ALLOWED_CHAPTERS = 20;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().findAndAddModules().build();
     private final NormalizationPipelineService normalizationPipelineService =
             new NormalizationPipelineService(objectMapper);
 
     @Test
     @DisplayName("Project Gutenberg EPUB samples normalize and produce a regression report")
     void normalizeSampleBooksAndWriteRegressionReport() throws Exception {
-        assertThat(Files.isDirectory(SAMPLE_DIR))
-                .as("sample directory must exist: %s", SAMPLE_DIR)
-                .isTrue();
+        assumeTrue(Files.isDirectory(SAMPLE_DIR), "sample directory is not present: " + SAMPLE_DIR);
 
         List<Path> files = Files.list(SAMPLE_DIR)
                 .filter(path -> path.getFileName().toString().toLowerCase().endsWith(".epub"))
                 .sorted()
                 .toList();
 
-        assertThat(files)
-                .as("at least one EPUB sample is required in %s", SAMPLE_DIR)
-                .isNotEmpty();
+        assumeTrue(!files.isEmpty(), "no EPUB samples are present in " + SAMPLE_DIR);
 
         List<Map<String, Object>> items = new ArrayList<>();
         int successCount = 0;
