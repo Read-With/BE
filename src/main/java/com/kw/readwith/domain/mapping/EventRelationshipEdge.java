@@ -8,6 +8,10 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
+@Table(uniqueConstraints = @UniqueConstraint(
+        name = "uk_event_relationship_edge_event_from_to",
+        columnNames = {"event_id", "from_char_id", "to_char_id"}
+))
 @Getter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
