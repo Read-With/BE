@@ -22,7 +22,28 @@ public interface CharacterImageAssetRepository extends JpaRepository<CharacterIm
 
     List<CharacterImageAsset> findByBookOrderByCreatedAtDesc(Book book);
 
+    List<CharacterImageAsset> findByBookAndAssetRoleOrderBySlotNoAscCreatedAtAsc(
+            Book book,
+            CharacterImageAssetRole assetRole
+    );
+
+    List<CharacterImageAsset> findByBookAndAssetRoleOrderByCreatedAtDesc(
+            Book book,
+            CharacterImageAssetRole assetRole
+    );
+
+    Optional<CharacterImageAsset> findByBookAndAssetRoleAndSlotNo(
+            Book book,
+            CharacterImageAssetRole assetRole,
+            Integer slotNo
+    );
+
     List<CharacterImageAsset> findByCharacterOrderByCreatedAtDesc(Character character);
+
+    Optional<CharacterImageAsset> findFirstByCharacterAndAssetRoleOrderByCreatedAtDesc(
+            Character character,
+            CharacterImageAssetRole assetRole
+    );
 
     Optional<CharacterImageAsset> findFirstByCharacterOrderByCreatedAtDesc(Character character);
 
