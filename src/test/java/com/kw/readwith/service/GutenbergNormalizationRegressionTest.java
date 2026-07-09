@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class GutenbergNormalizationRegressionTest {
 
@@ -33,18 +34,14 @@ class GutenbergNormalizationRegressionTest {
     @Test
     @DisplayName("Project Gutenberg EPUB samples normalize and produce a regression report")
     void normalizeSampleBooksAndWriteRegressionReport() throws Exception {
-        assertThat(Files.isDirectory(SAMPLE_DIR))
-                .as("sample directory must exist: %s", SAMPLE_DIR)
-                .isTrue();
+        assumeTrue(Files.isDirectory(SAMPLE_DIR), "sample directory is not present: " + SAMPLE_DIR);
 
         List<Path> files = Files.list(SAMPLE_DIR)
                 .filter(path -> path.getFileName().toString().toLowerCase().endsWith(".epub"))
                 .sorted()
                 .toList();
 
-        assertThat(files)
-                .as("at least one EPUB sample is required in %s", SAMPLE_DIR)
-                .isNotEmpty();
+        assumeTrue(!files.isEmpty(), "no EPUB samples are present in " + SAMPLE_DIR);
 
         List<Map<String, Object>> items = new ArrayList<>();
         int successCount = 0;

@@ -28,6 +28,9 @@ This branch migrates the service to Spring Boot 4.x instead.
 - Updated Spring AI image option builder calls for the Spring AI 2.0 API.
 - Removed production runtime H2 and the unused legacy Spring Cloud AWS starter
   in the earlier commit on this branch.
+- Removed bundled EPUB/upload/static samples from `src/main/resources/static`
+  so production builds rely on S3-backed data instead of packaging local sample
+  assets.
 
 ## Resource Findings
 
@@ -36,19 +39,20 @@ Spring Boot 4 does not reduce this service's deployable size by itself.
 - Initial Boot 3.3.1 jar before dependency cleanup: about `156.83 MB`.
 - After removing production H2 and legacy Spring Cloud AWS: about `147.83 MB`.
 - After the Boot 4.1.0 migration: about `209.73 MB`.
+- After removing `src/main/resources/static`: about `144.56 MB`.
 
-Current Boot 4 jar breakdown:
+Current Boot 4 jar breakdown after static asset removal:
 
 | Group | Size | Count |
 | --- | ---: | ---: |
 | `BOOT-INF/lib` | `143.75 MB` | `190` |
-| `BOOT-INF/classes/static` | `66.32 MB` | `452` |
 | `BOOT-INF/classes` | `1.32 MB` | `359` |
 | other | `0.39 MB` | `123` |
 
-The main size drivers are now library weight and bundled static assets. Boot 4
-also brings Jackson 3 while some third-party libraries still pull Jackson 2, so
-both Jackson generations are present on the runtime classpath.
+The static resource payload is no longer present in the production jar. The main
+remaining size driver is library weight. Boot 4 also brings Jackson 3 while some
+third-party libraries still pull Jackson 2, so both Jackson generations are
+present on the runtime classpath.
 
 ## Validation
 
@@ -81,8 +85,8 @@ Specific smoke checks after deploy:
 
 ## Follow-up Resource Work
 
-1. Split bundled EPUB/upload/sample assets out of the production jar.
-   `BOOT-INF/classes/static` is still about `66 MB`.
+1. Keep EPUB/upload/regression samples outside production resources. The
+   Gutenberg regression test now skips when local samples are absent.
 2. Review Spring AI/OpenAI dependency footprint. The new starter pulls webclient,
    restclient, reactor, Netty, Kotlin, and OpenAI client dependencies.
 3. Consider migrating S3 usage from AWS SDK v1 to AWS SDK v2 if image size and
