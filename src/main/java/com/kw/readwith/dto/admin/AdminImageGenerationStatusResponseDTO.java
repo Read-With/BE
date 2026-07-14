@@ -90,10 +90,10 @@ public class AdminImageGenerationStatusResponseDTO {
     @Builder
     @Schema(description = "대표 캐릭터 후보사진")
     public static class ReferenceCandidate {
-        @Schema(description = "후보사진 asset ID", example = "101")
+        @Schema(description = "후보사진 asset DB ID입니다. 후보 선택 API의 candidateId로 이 값을 전달합니다.", example = "101")
         private Long id;
 
-        @Schema(description = "후보 슬롯 번호입니다. 책마다 1~4만 유지됩니다.", example = "1")
+        @Schema(description = "화면 표시용 후보 슬롯 번호입니다. 책마다 1~4만 유지되며 candidateId로 사용하지 않습니다.", example = "1")
         private Integer slotNo;
 
         @Schema(
