@@ -43,6 +43,7 @@ public class ManifestService {
     private final V2TransitionGuard transitionGuard;
     private final NormalizedArtifactStorageService normalizedArtifactStorageService;
     private final NormalizationVersionService normalizationVersionService;
+    private final CdnUrlService cdnUrlService;
 
     public ManifestResponseDTO getBookManifest(Long bookId, Long userId) {
         Book book = validateAndGetBook(bookId, userId);
@@ -88,7 +89,7 @@ public class ManifestService {
                 .language(book.getLanguage())
                 .isDefault(book.isDefault())
                 .summary(book.isSummary())
-                .coverImgUrl(book.getCoverImgUrl())
+                .coverImgUrl(cdnUrlService.toPublicUrl(book.getCoverImgUrl()))
                 .summaryUrl(book.getSummaryUrl())
                 .epubPath(book.getEpubPath())
                 .normalizationStatus(enumName(book.getNormalizationStatus()))
@@ -146,7 +147,7 @@ public class ManifestService {
                         .id(character.getCharacterId())
                         .name(character.getName())
                         .names(character.getNames())
-                        .profileImage(character.getProfileImage())
+                        .profileImage(cdnUrlService.toPublicUrl(character.getProfileImage()))
                         .isMainCharacter(character.isMainCharacter())
                         .firstChapterIdx(character.getFirstChapterIdx())
                         .personalityText(character.getPersonalityText())

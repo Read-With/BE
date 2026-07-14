@@ -2,6 +2,7 @@ package com.kw.readwith.dto.admin;
 
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.CharacterImageAsset;
+import com.kw.readwith.service.CdnUrlService;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -113,11 +114,17 @@ public class AdminImageGenerationStatusResponseDTO {
         private String failureCode;
 
         public static ReferenceCandidate from(CharacterImageAsset asset, Long selectedReferenceCandidateId) {
+            return from(asset, selectedReferenceCandidateId, null);
+        }
+
+        public static ReferenceCandidate from(CharacterImageAsset asset,
+                                              Long selectedReferenceCandidateId,
+                                              CdnUrlService cdnUrlService) {
             return ReferenceCandidate.builder()
                     .id(asset.getId())
                     .slotNo(asset.getSlotNo())
                     .status(toReferenceStatus(asset, selectedReferenceCandidateId))
-                    .imageUrl(asset.getS3Url())
+                    .imageUrl(toPublicUrl(cdnUrlService, asset.getS3Url()))
                     .failureCode(asset.getFailureCode())
                     .build();
         }
@@ -176,13 +183,20 @@ public class AdminImageGenerationStatusResponseDTO {
         public static CharacterImage from(Character character,
                                           CharacterImageAsset asset,
                                           Long referenceCharacterId) {
+            return from(character, asset, referenceCharacterId, null);
+        }
+
+        public static CharacterImage from(Character character,
+                                          CharacterImageAsset asset,
+                                          Long referenceCharacterId,
+                                          CdnUrlService cdnUrlService) {
             return CharacterImage.builder()
                     .id(character.getId())
                     .bookCharacterId(character.getCharacterId())
                     .name(character.getName())
                     .mainCharacter(character.isMainCharacter())
                     .imageStatus(toCharacterStatus(asset, character))
-                    .imageUrl(resolveImageUrl(asset, character))
+                    .imageUrl(toPublicUrl(cdnUrlService, resolveImageUrl(asset, character)))
                     .assetId(asset != null ? asset.getId() : null)
                     .failureCode(asset != null ? asset.getFailureCode() : null)
                     .referenceCharacter(referenceCharacterId != null && referenceCharacterId.equals(character.getId()))
@@ -206,5 +220,9 @@ public class AdminImageGenerationStatusResponseDTO {
             }
             return character.getProfileImage();
         }
+    }
+
+    private static String toPublicUrl(CdnUrlService cdnUrlService, String value) {
+        return cdnUrlService == null ? value : cdnUrlService.toPublicUrl(value);
     }
 }

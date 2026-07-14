@@ -48,6 +48,7 @@ public class FineGraphService {
     private final V2TransitionGuard transitionGuard;
     private final BookAccessPolicy bookAccessPolicy;
     private final LocatorSupport locatorSupport;
+    private final CdnUrlService cdnUrlService;
 
     public FineGraphResponseDTO getFineGraph(
             Long bookId,
@@ -170,7 +171,7 @@ public class FineGraphService {
                 .id(character.getCharacterId())
                 .label(character.getName())
                 .isMainCharacter(character.isMainCharacter())
-                .profileImage(character.getProfileImage())
+                .profileImage(cdnUrlService.toPublicUrl(character.getProfileImage()))
                 .description(truncateText(character.getPersonalityText(), 200))
                 .portraitPrompt(character.getProfileText())
                 .names(parseNames(character.getNames(), character.getName()))

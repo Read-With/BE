@@ -2,6 +2,7 @@ package com.kw.readwith.dto.admin;
 
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.CharacterImageAsset;
+import com.kw.readwith.service.CdnUrlService;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -33,14 +34,24 @@ public class CharacterImageCharacterStatusDTO {
     private CharacterImageAssetDTO latestAsset;
 
     public static CharacterImageCharacterStatusDTO from(Character character, CharacterImageAsset latestAsset) {
+        return from(character, latestAsset, null);
+    }
+
+    public static CharacterImageCharacterStatusDTO from(Character character,
+                                                        CharacterImageAsset latestAsset,
+                                                        CdnUrlService cdnUrlService) {
         return CharacterImageCharacterStatusDTO.builder()
                 .id(character.getId())
                 .bookCharacterId(character.getCharacterId())
                 .name(character.getName())
                 .mainCharacter(character.isMainCharacter())
-                .publishedImageUrl(character.getProfileImage())
+                .publishedImageUrl(toPublicUrl(cdnUrlService, character.getProfileImage()))
                 .imageGenerationStatus(character.getImageGenerationStatus() != null ? character.getImageGenerationStatus().name() : null)
-                .latestAsset(CharacterImageAssetDTO.from(latestAsset))
+                .latestAsset(CharacterImageAssetDTO.from(latestAsset, cdnUrlService))
                 .build();
+    }
+
+    private static String toPublicUrl(CdnUrlService cdnUrlService, String value) {
+        return cdnUrlService == null ? value : cdnUrlService.toPublicUrl(value);
     }
 }

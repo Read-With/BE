@@ -7,16 +7,27 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
+import com.kw.readwith.domain.enums.ProcessingJobStatus;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
+import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.dto.admin.UnsummarizedItemDTO;
+import com.kw.readwith.repository.BookCharacterImageProfileRepository;
 import com.kw.readwith.repository.BookRepository;
+import com.kw.readwith.repository.BookmarkRepository;
+import com.kw.readwith.repository.ChapterCharacterStatRepository;
+import com.kw.readwith.repository.ChapterRelationshipEdgeRepository;
+import com.kw.readwith.repository.CharacterImageAssetRepository;
 import com.kw.readwith.repository.CharacterPovSummaryRepository;
 import com.kw.readwith.repository.CharacterRepository;
 import com.kw.readwith.repository.ChapterRepository;
 import com.kw.readwith.repository.EventCharacterStatRepository;
 import com.kw.readwith.repository.EventRelationshipEdgeRepository;
 import com.kw.readwith.repository.EventRepository;
+import com.kw.readwith.repository.FavoriteRepository;
+import com.kw.readwith.repository.ProcessingJobLogRepository;
+import com.kw.readwith.repository.ProcessingJobRepository;
+import com.kw.readwith.repository.UserReadStateRepository;
 import com.kw.readwith.service.normalization.NormalizationVersionService;
 import com.kw.readwith.service.normalization.NormalizedArtifactStorageService;
 import com.kw.readwith.util.LocatorSupport;
@@ -69,6 +80,24 @@ class AdminServiceTest {
     @Mock
     private CharacterPovSummaryRepository characterPovSummaryRepository;
     @Mock
+    private ChapterCharacterStatRepository chapterCharacterStatRepository;
+    @Mock
+    private ChapterRelationshipEdgeRepository chapterRelationshipEdgeRepository;
+    @Mock
+    private CharacterImageAssetRepository characterImageAssetRepository;
+    @Mock
+    private BookCharacterImageProfileRepository bookCharacterImageProfileRepository;
+    @Mock
+    private FavoriteRepository favoriteRepository;
+    @Mock
+    private BookmarkRepository bookmarkRepository;
+    @Mock
+    private UserReadStateRepository userReadStateRepository;
+    @Mock
+    private ProcessingJobRepository processingJobRepository;
+    @Mock
+    private ProcessingJobLogRepository processingJobLogRepository;
+    @Mock
     private CharacterImageService characterImageService;
     @Mock
     private BookAnalysisStatusService bookAnalysisStatusService;
@@ -80,6 +109,8 @@ class AdminServiceTest {
     private NormalizationVersionService normalizationVersionService;
     @Mock
     private NormalizedArtifactStorageService normalizedArtifactStorageService;
+    @Mock
+    private CdnUrlService cdnUrlService;
     @Mock
     private EntityManager entityManager;
 
@@ -445,6 +476,64 @@ class AdminServiceTest {
         adminService.deleteRelationships(bookId, chapterIdx, eventIdx);
 
         verify(eventRelationshipEdgeRepository, times(1)).deleteByEvent(event);
+    }
+
+    @Test
+    @DisplayName("deleteBook deletes jobs and related book data")
+    void deleteBook_deletesRelatedData() {
+        Long bookId = 1L;
+        Book book = Book.builder().id(bookId).build();
+        ProcessingJob job = ProcessingJob.builder()
+                .id(99L)
+                .book(book)
+                .status(ProcessingJobStatus.READY)
+                .build();
+        List<ProcessingJob> jobs = List.of(job);
+
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(processingJobRepository.existsByBookIdAndStatusIn(
+                bookId,
+                java.util.EnumSet.of(ProcessingJobStatus.QUEUED, ProcessingJobStatus.PROCESSING)
+        )).willReturn(false);
+        given(processingJobRepository.findAllByBook(book)).willReturn(jobs);
+
+        adminService.deleteBook(bookId);
+
+        verify(processingJobLogRepository, times(1)).deleteByJobIn(jobs);
+        verify(processingJobRepository, times(1)).deleteByBook(book);
+        verify(bookCharacterImageProfileRepository, times(1)).deleteByBook(book);
+        verify(characterImageAssetRepository, times(1)).clearSourceReferencesByBook(book);
+        verify(characterImageAssetRepository, times(1)).deleteByBook(book);
+        verify(eventRelationshipEdgeRepository, times(1)).deleteByBook(book);
+        verify(statRepository, times(1)).deleteByBook(book);
+        verify(chapterRelationshipEdgeRepository, times(1)).deleteByBook(book);
+        verify(characterPovSummaryRepository, times(1)).deleteByBook(book);
+        verify(chapterCharacterStatRepository, times(1)).deleteByBook(book);
+        verify(favoriteRepository, times(1)).deleteByBook(book);
+        verify(bookmarkRepository, times(1)).deleteByBook(book);
+        verify(userReadStateRepository, times(1)).deleteByBook(book);
+        verify(eventRepository, times(1)).deleteByBook(book);
+        verify(characterRepository, times(1)).deleteByBook(book);
+        verify(chapterRepository, times(1)).deleteByBook(book);
+        verify(bookRepository, times(1)).delete(book);
+    }
+
+    @Test
+    @DisplayName("deleteBook rejects active processing jobs")
+    void deleteBook_throwsException_whenActiveJobExists() {
+        Long bookId = 1L;
+        Book book = Book.builder().id(bookId).build();
+
+        given(bookRepository.findById(bookId)).willReturn(Optional.of(book));
+        given(processingJobRepository.existsByBookIdAndStatusIn(
+                bookId,
+                java.util.EnumSet.of(ProcessingJobStatus.QUEUED, ProcessingJobStatus.PROCESSING)
+        )).willReturn(true);
+
+        GeneralException exception = assertThrows(GeneralException.class, () -> adminService.deleteBook(bookId));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.BOOK_DELETE_JOB_IN_PROGRESS);
+        verify(bookRepository, never()).delete(book);
     }
 
     @Test

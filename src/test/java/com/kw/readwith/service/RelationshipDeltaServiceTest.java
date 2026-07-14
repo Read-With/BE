@@ -48,6 +48,9 @@ class RelationshipDeltaServiceTest {
     @Mock
     private LocatorSupport locatorSupport;
 
+    @Mock
+    private CdnUrlService cdnUrlService;
+
     private RelationshipDeltaService relationshipDeltaService;
 
     @BeforeEach
@@ -60,7 +63,8 @@ class RelationshipDeltaServiceTest {
                 eventCharacterStatRepository,
                 new ObjectMapper(),
                 bookAccessPolicy,
-                locatorSupport
+                locatorSupport,
+                cdnUrlService
         );
     }
 

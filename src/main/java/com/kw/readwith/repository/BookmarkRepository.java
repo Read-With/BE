@@ -1,7 +1,9 @@
 package com.kw.readwith.repository;
 
+import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Bookmark;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -34,4 +36,7 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
      * 사용자의 특정 책 북마크 개수
      */
     long countByUserIdAndBookId(Long userId, Long bookId);
+
+    @Modifying
+    int deleteByBook(Book book);
 }

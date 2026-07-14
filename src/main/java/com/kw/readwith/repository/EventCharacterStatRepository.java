@@ -5,6 +5,7 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -33,4 +34,9 @@ public interface EventCharacterStatRepository extends JpaRepository<EventCharact
     boolean existsByEvent(Event event);
 
     int deleteByEvent(Event event);
+
+    @Modifying
+    @Query("DELETE FROM EventCharacterStat stat WHERE stat.event IN " +
+           "(SELECT event FROM Event event WHERE event.book = :book)")
+    int deleteByBook(@Param("book") Book book);
 }
