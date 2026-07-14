@@ -37,6 +37,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -72,6 +73,9 @@ public class AdminImageGenerationService {
         Character referenceCharacter = resolveReferenceCharacter(book)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.IMAGE_REFERENCE_CHARACTER_REQUIRED));
         BookCharacterImageProfile profile = getOrCreateProfile(book);
+        Long previousActiveReferenceId = Optional.ofNullable(profile.getActiveReferenceAsset())
+                .map(CharacterImageAsset::getId)
+                .orElse(null);
         profile.markReferenceCandidatesGenerating(
                 referenceCharacter,
                 resolveTextImageModel(),
@@ -83,14 +87,22 @@ public class AdminImageGenerationService {
         for (int slotNo = 1; slotNo <= REFERENCE_CANDIDATE_COUNT; slotNo++) {
             CharacterImageAsset asset = getOrCreateReferenceCandidate(book, referenceCharacter, slotNo);
             try {
+                String previousS3Url = asset.getS3Url();
                 GeneratedCharacterImage generated = characterImageService.generateTextImage(referenceCharacter);
                 String s3Url = characterImageService.uploadGeneratedImage(
                         referenceCharacter,
                         generated.imageData(),
-                        characterImageService.buildReferenceCandidateSlotS3KeyName(referenceCharacter, slotNo)
+                        characterImageService.buildReferenceCandidateSlotS3KeyName(
+                                referenceCharacter,
+                                slotNo,
+                                asset.getAttemptNo()
+                        )
                 );
                 asset.generated(s3Url, generated.model(), generated.promptHash(), generated.requestId());
                 asset.markQaPassed("{\"passed\":true,\"mode\":\"ADMIN_REFERENCE_CANDIDATE\"}");
+                if (!Objects.equals(asset.getId(), previousActiveReferenceId)) {
+                    characterImageService.deleteReplacedGeneratedImage(previousS3Url, s3Url);
+                }
                 successCount++;
             } catch (Exception e) {
                 log.error("Reference candidate generation failed. bookId={}, slotNo={}", bookId, slotNo, e);
@@ -117,6 +129,7 @@ public class AdminImageGenerationService {
         ensureReadyReferenceCandidate(candidate);
 
         BookCharacterImageProfile profile = getOrCreateProfile(book);
+        String previousProfileImageUrl = candidate.getCharacter().getProfileImage();
         profile.selectReferenceCandidate(candidate, "admin");
         candidate.publish();
         characterRepository.updateProfileImageAndStatus(
@@ -124,6 +137,7 @@ public class AdminImageGenerationService {
                 candidate.getS3Url(),
                 ImageGenerationStatus.COMPLETED
         );
+        characterImageService.deleteReplacedGeneratedImage(previousProfileImageUrl, candidate.getS3Url());
 
         fanoutJobService.queueFanout(book, profile, candidate);
         return buildStatusResponse(book);
@@ -158,13 +172,18 @@ public class AdminImageGenerationService {
         CharacterImageAsset asset = getOrCreateCharacterImageAsset(character, reference, referenceVersion);
 
         try {
+            String previousS3Url = asset.getS3Url();
             byte[] referenceImage = restTemplate.getForObject(cdnUrlService.toPublicUrl(reference.getS3Url()), byte[].class);
             String prompt = characterImageService.buildReferenceEditPrompt(character);
             GeneratedCharacterImage generated = imageEditClient.generate(referenceImage, prompt);
             String s3Url = characterImageService.uploadGeneratedImage(
                     character,
                     generated.imageData(),
-                    characterImageService.buildPublishedS3KeyName(character)
+                    characterImageService.buildPublishedS3KeyName(
+                            character,
+                            asset.getReferenceVersion(),
+                            asset.getAttemptNo()
+                    )
             );
             asset.generated(s3Url, generated.model(), generated.promptHash(), generated.requestId());
             asset.markQaPassed("{\"passed\":true,\"mode\":\"ADMIN_CHARACTER_FANOUT\"}");
@@ -174,6 +193,7 @@ public class AdminImageGenerationService {
                     s3Url,
                     ImageGenerationStatus.COMPLETED
             );
+            characterImageService.deleteReplacedGeneratedImage(previousS3Url, s3Url);
         } catch (Exception e) {
             log.error("Character image fan-out failed. characterId={}, referenceAssetId={}",
                     character.getId(), reference.getId(), e);

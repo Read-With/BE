@@ -416,7 +416,11 @@ public class CharacterImageFanoutJobService {
             String s3Url = characterImageService.uploadGeneratedImage(
                     target.character(),
                     result.imageData(),
-                    characterImageService.buildPublishedS3KeyName(target.character())
+                    characterImageService.buildPublishedS3KeyName(
+                            target.character(),
+                            target.referenceVersion(),
+                            target.attemptNo()
+                    )
             );
             completeTargetSuccess(jobId, assetId, s3Url, result.requestId());
         } catch (Exception e) {
@@ -444,7 +448,11 @@ public class CharacterImageFanoutJobService {
             if (asset.getStatus() == CharacterImageAssetStatus.PUBLISHED) {
                 return null;
             }
-            return new TargetUploadContext(asset.getCharacter());
+            return new TargetUploadContext(
+                    asset.getCharacter(),
+                    asset.getReferenceVersion(),
+                    asset.getAttemptNo()
+            );
         });
     }
 
@@ -459,6 +467,7 @@ public class CharacterImageFanoutJobService {
                 return;
             }
 
+            String previousS3Url = asset.getS3Url();
             asset.generated(s3Url, asset.getModel(), asset.getPromptHash(), requestId);
             asset.markQaPassed(serializePayload(Map.of(
                     "passed", true,
@@ -473,6 +482,7 @@ public class CharacterImageFanoutJobService {
                     s3Url,
                     ImageGenerationStatus.COMPLETED
             );
+            characterImageService.deleteReplacedGeneratedImage(previousS3Url, s3Url);
             writeLog(job, ProcessingJobLogLevel.INFO, "character_published", "Character image has been published from Batch output.", Map.of(
                     "assetId", asset.getId(),
                     "characterId", asset.getCharacter().getId(),
@@ -754,6 +764,6 @@ public class CharacterImageFanoutJobService {
     private record PollContext(String externalJobId) {
     }
 
-    private record TargetUploadContext(Character character) {
+    private record TargetUploadContext(Character character, int referenceVersion, int attemptNo) {
     }
 }

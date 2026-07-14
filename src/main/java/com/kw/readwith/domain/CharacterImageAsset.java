@@ -152,7 +152,6 @@ public class CharacterImageAsset extends BaseEntity {
         this.referenceVersion = 0;
         this.slotNo = slotNo;
         this.status = CharacterImageAssetStatus.GENERATING;
-        this.s3Url = null;
         this.model = null;
         this.promptHash = null;
         this.qaResultJson = null;
@@ -173,7 +172,6 @@ public class CharacterImageAsset extends BaseEntity {
         this.referenceVersion = referenceVersion;
         this.slotNo = null;
         this.status = CharacterImageAssetStatus.GENERATING;
-        this.s3Url = null;
         this.model = null;
         this.promptHash = null;
         this.qaResultJson = null;

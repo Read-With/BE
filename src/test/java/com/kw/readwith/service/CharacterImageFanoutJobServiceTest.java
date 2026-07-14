@@ -252,22 +252,29 @@ class CharacterImageFanoutJobServiceTest {
             ));
             return null;
         }).when(batchClient).streamResults(eq("file-output"), any());
-        given(characterImageService.buildPublishedS3KeyName(targetCharacter))
-                .willReturn("character-images/20/101.png");
+        given(characterImageService.buildPublishedS3KeyName(targetCharacter, 1, 1))
+                .willReturn("character-images/20/101/reference-v1/attempt-1.png");
         given(characterImageService.uploadGeneratedImage(
-                eq(targetCharacter), any(byte[].class), eq("character-images/20/101.png")
-        )).willReturn("https://s3.test/character-images/20/101.png");
+                eq(targetCharacter),
+                any(byte[].class),
+                eq("character-images/20/101/reference-v1/attempt-1.png")
+        )).willReturn("https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png");
 
         service.refresh(620L);
 
         assertThat(job.getStatus()).isEqualTo(ProcessingJobStatus.READY);
         assertThat(job.getOutputFileId()).isEqualTo("file-output");
         assertThat(targetAsset.getStatus()).isEqualTo(CharacterImageAssetStatus.PUBLISHED);
-        assertThat(targetAsset.getS3Url()).isEqualTo("https://s3.test/character-images/20/101.png");
+        assertThat(targetAsset.getS3Url())
+                .isEqualTo("https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png");
         verify(characterRepository).updateProfileImageAndStatus(
                 101L,
-                "https://s3.test/character-images/20/101.png",
+                "https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png",
                 ImageGenerationStatus.COMPLETED
+        );
+        verify(characterImageService).deleteReplacedGeneratedImage(
+                "https://cdn.readwith.store/character-images/20/101/reference-v0/attempt-1.png",
+                "https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png"
         );
     }
 
@@ -282,6 +289,7 @@ class CharacterImageFanoutJobServiceTest {
                 .processingJob(job)
                 .referenceVersion(1)
                 .status(CharacterImageAssetStatus.GENERATING)
+                .s3Url("https://cdn.readwith.store/character-images/20/101/reference-v0/attempt-1.png")
                 .model("gpt-image-2")
                 .promptHash("prompt-hash")
                 .build();

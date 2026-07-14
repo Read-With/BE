@@ -149,8 +149,12 @@ class AdminImageGenerationServiceTest {
         )).willReturn(List.of());
         given(characterImageService.generateTextImage(mainCharacter))
                 .willReturn(new GeneratedCharacterImage(new byte[]{1}, "gpt-image-2", "prompt", "hash", "req-1"));
-        when(characterImageService.buildReferenceCandidateSlotS3KeyName(eq(mainCharacter), anyInt()))
-                .thenAnswer(invocation -> "character-images/1/reference/slot-" + invocation.getArgument(1) + ".png");
+        when(characterImageService.buildReferenceCandidateSlotS3KeyName(
+                eq(mainCharacter),
+                anyInt(),
+                anyInt()
+        )).thenAnswer(invocation -> "character-images/1/reference/attempt-"
+                + invocation.getArgument(2) + "/slot-" + invocation.getArgument(1) + ".png");
         when(characterImageService.uploadGeneratedImage(eq(mainCharacter), any(byte[].class), anyString()))
                 .thenAnswer(invocation -> "https://cdn.test/" + invocation.getArgument(2));
 
@@ -169,7 +173,7 @@ class AdminImageGenerationServiceTest {
         verify(characterImageService).uploadGeneratedImage(
                 eq(mainCharacter),
                 any(byte[].class),
-                eq("character-images/1/reference/slot-1.png")
+                eq("character-images/1/reference/attempt-1/slot-1.png")
         );
     }
 

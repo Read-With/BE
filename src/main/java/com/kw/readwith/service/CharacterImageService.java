@@ -18,6 +18,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +30,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -90,6 +93,7 @@ public class CharacterImageService {
     private final CharacterRepository characterRepository;
     private final CharacterImageProperties imageProperties;
     private final CharacterImageTransactionService transactionService;
+    private final CdnUrlService cdnUrlService;
 
     @Async("imageGenerationExecutor")
     public CompletableFuture<Void> generateImagesAsync(List<Long> characterIds) {
@@ -160,6 +164,7 @@ public class CharacterImageService {
             GeneratedCharacterImage generatedImage = generateTextImage(character);
             String s3Url = uploadGeneratedImage(character, generatedImage.imageData(), buildPublishedS3KeyName(character));
             updateImageUrlOnly(characterId, s3Url);
+            deleteReplacedGeneratedImage(character.getProfileImage(), s3Url);
 
             log.info("Character image generation completed. characterId={}, s3Url={}", characterId, s3Url);
         } catch (Exception e) {
@@ -227,10 +232,11 @@ public class CharacterImageService {
                 UUID.randomUUID());
     }
 
-    public String buildReferenceCandidateSlotS3KeyName(Character character, int slotNo) {
-        return String.format("%s/%d/reference/slot-%d.png",
+    public String buildReferenceCandidateSlotS3KeyName(Character character, int slotNo, int attemptNo) {
+        return String.format("%s/%d/reference/attempt-%d/slot-%d.png",
                 imageProperties.getS3Path(),
                 character.getBook().getId(),
+                attemptNo,
                 slotNo);
     }
 
@@ -389,10 +395,63 @@ public class CharacterImageService {
     }
 
     public String buildPublishedS3KeyName(Character character) {
-        return String.format("%s/%d/%d.png",
+        return String.format("%s/%d/%d/standalone/%s.png",
                 imageProperties.getS3Path(),
                 character.getBook().getId(),
-                character.getId());
+                character.getId(),
+                UUID.randomUUID());
+    }
+
+    public String buildPublishedS3KeyName(Character character, int referenceVersion, int attemptNo) {
+        return String.format("%s/%d/%d/reference-v%d/attempt-%d.png",
+                imageProperties.getS3Path(),
+                character.getBook().getId(),
+                character.getId(),
+                referenceVersion,
+                attemptNo);
+    }
+
+    public void deleteReplacedGeneratedImage(String previousUrl, String replacementUrl) {
+        Optional<String> previousKey = cdnUrlService.toPublicObjectKey(previousUrl);
+        Optional<String> replacementKey = cdnUrlService.toPublicObjectKey(replacementUrl);
+        if (previousKey.isEmpty()
+                || replacementKey.isEmpty()
+                || !isManagedCharacterImageKey(previousKey.get())
+                || !isManagedCharacterImageKey(replacementKey.get())
+                || previousKey.equals(replacementKey)) {
+            return;
+        }
+
+        Runnable cleanup = () -> {
+            try {
+                s3Manager.deleteKeys(List.of(previousKey.get()));
+            } catch (RuntimeException e) {
+                log.warn("Failed to delete replaced character image from S3. key={}", previousKey.get(), e);
+            }
+        };
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanup.run();
+                }
+            });
+            return;
+        }
+        cleanup.run();
+    }
+
+    private boolean isManagedCharacterImageKey(String key) {
+        String configuredPath = normalizePromptSegment(imageProperties.getS3Path());
+        String imagePath = configuredPath == null ? "character-images" : configuredPath;
+        while (imagePath.startsWith("/")) {
+            imagePath = imagePath.substring(1);
+        }
+        while (imagePath.endsWith("/")) {
+            imagePath = imagePath.substring(0, imagePath.length() - 1);
+        }
+        return !imagePath.isBlank() && key.startsWith(imagePath + "/");
     }
 
     private String sha256(String value) {

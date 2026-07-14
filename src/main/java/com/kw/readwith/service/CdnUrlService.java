@@ -32,9 +32,29 @@ public class CdnUrlService {
             return normalized;
         }
 
-        return resolvePublicObjectKey(normalized)
+        return toPublicObjectKey(normalized)
                 .map(key -> cloudFrontBaseUrl + "/" + key)
                 .orElse(normalized);
+    }
+
+    public Optional<String> toPublicObjectKey(String value) {
+        if (value == null || value.isBlank()) {
+            return Optional.empty();
+        }
+
+        String normalized = value.trim();
+        String cloudFrontBaseUrl = trimTrailingSlash(artifactStorageProperties.getCloudFrontBaseUrl());
+        if (!cloudFrontBaseUrl.isBlank() && normalized.startsWith(cloudFrontBaseUrl + "/")) {
+            String key = normalized.substring(cloudFrontBaseUrl.length() + 1);
+            return isAllowedPublicKey(key) ? Optional.of(key) : Optional.empty();
+        }
+
+        String keyCandidate = stripLeadingSlash(normalized);
+        if (isAllowedPublicKey(keyCandidate)) {
+            return Optional.of(keyCandidate);
+        }
+
+        return extractS3Key(normalized).filter(this::isAllowedPublicKey);
     }
 
     public boolean isPublicObjectKey(String value) {
@@ -52,16 +72,6 @@ public class CdnUrlService {
         String normalized = value.trim();
         return !cloudFrontBaseUrl.isBlank()
                 && (normalized.equals(cloudFrontBaseUrl) || normalized.startsWith(cloudFrontBaseUrl + "/"));
-    }
-
-    private Optional<String> resolvePublicObjectKey(String value) {
-        String keyCandidate = stripLeadingSlash(value);
-        if (isAllowedPublicKey(keyCandidate)) {
-            return Optional.of(keyCandidate);
-        }
-
-        Optional<String> s3Key = extractS3Key(value);
-        return s3Key.filter(this::isAllowedPublicKey);
     }
 
     private Optional<String> extractS3Key(String value) {
