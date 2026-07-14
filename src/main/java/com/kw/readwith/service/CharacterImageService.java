@@ -52,6 +52,15 @@ public class CharacterImageService {
             "no split composition, no diptych, no mirrored duplicate, no reflected second face, no twin, " +
             "no interaction scene, no full body, no wide shot, no props, no scenery, no ornate background";
 
+    private static final String SERIES_LOCK_PROMPT =
+            "Treat the input image as the immutable visual bible for this book series. " +
+            "Preserve its medium and rendering technique, line weight, brush and paper texture, color temperature, " +
+            "saturation, lighting direction and softness, background tone, crop, camera angle, facial proportions, " +
+            "and level of detail. Keep these style attributes consistent across every character portrait. " +
+            "Change only the person's identity and the character-specific physical traits and clothing described below. " +
+            "Do not copy the reference person's face, expression, hair, or clothing. " +
+            "Render exactly one distinct target character with no text, border, emblem, or decorative object. TARGET: ";
+
     private static final List<String> DISALLOWED_PROMPT_SEGMENTS = List.of(
             "duo portrait",
             "pair portrait",
@@ -236,7 +245,7 @@ public class CharacterImageService {
 
     private String resolveImageModel() {
         String configured = normalizePromptSegment(imageProperties.getModel());
-        return configured != null ? configured : "gpt-image-1";
+        return configured != null ? configured : "gpt-image-2";
     }
 
     private String resolveImageQuality() {
@@ -258,6 +267,14 @@ public class CharacterImageService {
         appendPromptSegment(prompt, NEGATIVE_LAYOUT_ENFORCEMENT);
 
         return prompt.toString();
+    }
+
+    public String buildReferenceEditPrompt(Character character) {
+        return SERIES_LOCK_PROMPT + buildImagePrompt(character);
+    }
+
+    public String buildPromptHash(String prompt) {
+        return sha256(prompt);
     }
 
     private String resolveBookPrompt(Book book) {

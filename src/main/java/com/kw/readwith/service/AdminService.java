@@ -892,11 +892,10 @@ public class AdminService {
         if (!jobs.isEmpty()) {
             processingJobLogRepository.deleteByJobIn(jobs);
         }
-        processingJobRepository.deleteByBook(book);
-
         bookCharacterImageProfileRepository.deleteByBook(book);
         characterImageAssetRepository.clearSourceReferencesByBook(book);
         characterImageAssetRepository.deleteByBook(book);
+        processingJobRepository.deleteByBook(book);
 
         eventRelationshipEdgeRepository.deleteByBook(book);
         statRepository.deleteByBook(book);

@@ -11,11 +11,15 @@ import com.kw.readwith.domain.enums.CharacterImageAssetRole;
 import com.kw.readwith.domain.enums.CharacterImageAssetStatus;
 import com.kw.readwith.domain.enums.CharacterImageGenerationMode;
 import com.kw.readwith.domain.enums.ImageGenerationStatus;
+import com.kw.readwith.domain.enums.ProcessingJobStatus;
+import com.kw.readwith.domain.enums.ProcessingPipelineType;
+import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.dto.admin.AdminImageGenerationStatusResponseDTO;
 import com.kw.readwith.repository.BookCharacterImageProfileRepository;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.CharacterImageAssetRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.ProcessingJobRepository;
 import com.kw.readwith.service.image.GeneratedCharacterImage;
 import com.kw.readwith.service.image.OpenAiImageEditClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,6 +70,10 @@ class AdminImageGenerationServiceTest {
     @Mock
     private CharacterImageProperties imageProperties;
     @Mock
+    private CharacterImageFanoutJobService fanoutJobService;
+    @Mock
+    private ProcessingJobRepository processingJobRepository;
+    @Mock
     private RestTemplate restTemplate;
     @Mock
     private CdnUrlService cdnUrlService;
@@ -114,7 +122,7 @@ class AdminImageGenerationServiceTest {
         AtomicLong idSequence = new AtomicLong(100L);
 
         given(bookRepository.findById(1L)).willReturn(Optional.of(book));
-        given(imageProperties.getModel()).willReturn("gpt-image-1");
+        given(imageProperties.getModel()).willReturn("gpt-image-2");
         given(imageProperties.getBaseStylePrompt()).willReturn("editorial gouache portrait");
         given(characterRepository.findByBookOrderByIsMainCharacterDescNameAsc(book))
                 .willReturn(List.of(mainCharacter, sideCharacter));
@@ -140,7 +148,7 @@ class AdminImageGenerationServiceTest {
                 CharacterImageAssetRole.CHARACTER_IMAGE
         )).willReturn(List.of());
         given(characterImageService.generateTextImage(mainCharacter))
-                .willReturn(new GeneratedCharacterImage(new byte[]{1}, "gpt-image-1", "prompt", "hash", "req-1"));
+                .willReturn(new GeneratedCharacterImage(new byte[]{1}, "gpt-image-2", "prompt", "hash", "req-1"));
         when(characterImageService.buildReferenceCandidateSlotS3KeyName(eq(mainCharacter), anyInt()))
                 .thenAnswer(invocation -> "character-images/1/reference/slot-" + invocation.getArgument(1) + ".png");
         when(characterImageService.uploadGeneratedImage(eq(mainCharacter), any(byte[].class), anyString()))
@@ -204,5 +212,27 @@ class AdminImageGenerationServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.IMAGE_REFERENCE_NOT_APPROVED);
+    }
+
+    @Test
+    @DisplayName("individual regeneration is blocked while a fan-out Batch is active")
+    void regenerateCharacterImage_rejectsActiveFanoutJob() {
+        ProcessingJob activeJob = ProcessingJob.builder()
+                .id(500L)
+                .book(book)
+                .pipelineType(ProcessingPipelineType.IMAGE_GENERATION)
+                .status(ProcessingJobStatus.PROCESSING)
+                .build();
+        given(bookRepository.findById(1L)).willReturn(Optional.of(book));
+        given(processingJobRepository.findFirstByBookIdAndPipelineTypeAndStatusInOrderByCreatedAtDesc(
+                eq(1L), eq(ProcessingPipelineType.IMAGE_GENERATION), any()
+        )).willReturn(Optional.of(activeJob));
+
+        GeneralException exception = assertThrows(
+                GeneralException.class,
+                () -> adminImageGenerationService.regenerateCharacterImage(1L, 11L)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorStatus.IMAGE_FANOUT_JOB_ACTIVE);
     }
 }

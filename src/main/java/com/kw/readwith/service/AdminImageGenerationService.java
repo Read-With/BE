@@ -12,11 +12,15 @@ import com.kw.readwith.domain.enums.CharacterImageAssetRole;
 import com.kw.readwith.domain.enums.CharacterImageAssetStatus;
 import com.kw.readwith.domain.enums.CharacterImageGenerationMode;
 import com.kw.readwith.domain.enums.ImageGenerationStatus;
+import com.kw.readwith.domain.enums.ProcessingPipelineType;
+import com.kw.readwith.domain.enums.ProcessingJobStatus;
 import com.kw.readwith.dto.admin.AdminImageGenerationStatusResponseDTO;
+import com.kw.readwith.dto.admin.ProcessingJobResponseDTO;
 import com.kw.readwith.repository.BookCharacterImageProfileRepository;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.CharacterImageAssetRepository;
 import com.kw.readwith.repository.CharacterRepository;
+import com.kw.readwith.repository.ProcessingJobRepository;
 import com.kw.readwith.service.image.GeneratedCharacterImage;
 import com.kw.readwith.service.image.OpenAiImageEditClient;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +55,8 @@ public class AdminImageGenerationService {
     private final CharacterImageService characterImageService;
     private final OpenAiImageEditClient imageEditClient;
     private final CharacterImageProperties imageProperties;
+    private final CharacterImageFanoutJobService fanoutJobService;
+    private final ProcessingJobRepository processingJobRepository;
     private final RestTemplate restTemplate;
     private final CdnUrlService cdnUrlService;
 
@@ -61,6 +68,7 @@ public class AdminImageGenerationService {
     @Transactional
     public AdminImageGenerationStatusResponseDTO generateReferenceCandidates(Long bookId) {
         Book book = getBook(bookId);
+        ensureNoActiveFanoutJob(bookId);
         Character referenceCharacter = resolveReferenceCharacter(book)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.IMAGE_REFERENCE_CHARACTER_REQUIRED));
         BookCharacterImageProfile profile = getOrCreateProfile(book);
@@ -102,6 +110,7 @@ public class AdminImageGenerationService {
     @Transactional
     public AdminImageGenerationStatusResponseDTO selectReferenceCandidate(Long bookId, Long candidateId) {
         Book book = getBook(bookId);
+        ensureNoActiveFanoutJob(bookId);
         CharacterImageAsset candidate = assetRepository.findByIdAndBook(candidateId, book)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.IMAGE_ASSET_NOT_BELONG_TO_BOOK));
         ensureReferenceCandidate(candidate);
@@ -116,13 +125,14 @@ public class AdminImageGenerationService {
                 ImageGenerationStatus.COMPLETED
         );
 
-        fanOutAllCharacters(book, profile, candidate);
+        fanoutJobService.queueFanout(book, profile, candidate);
         return buildStatusResponse(book);
     }
 
     @Transactional
     public AdminImageGenerationStatusResponseDTO regenerateCharacterImage(Long bookId, Long characterId) {
         Book book = getBook(bookId);
+        ensureNoActiveFanoutJob(bookId);
         Character character = getCharacter(characterId);
         if (!character.getBook().getId().equals(book.getId())) {
             throw new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND);
@@ -142,19 +152,6 @@ public class AdminImageGenerationService {
         return buildStatusResponse(book);
     }
 
-    private void fanOutAllCharacters(Book book,
-                                     BookCharacterImageProfile profile,
-                                     CharacterImageAsset reference) {
-        List<Character> characters = characterRepository.findByBookOrderByIsMainCharacterDescNameAsc(book);
-        for (Character character : characters) {
-            if (profile.getReferenceCharacter() != null
-                    && profile.getReferenceCharacter().getId().equals(character.getId())) {
-                continue;
-            }
-            generateCharacterImageFromReference(character, reference, profile.getReferenceVersion());
-        }
-    }
-
     private CharacterImageAsset generateCharacterImageFromReference(Character character,
                                                                     CharacterImageAsset reference,
                                                                     int referenceVersion) {
@@ -162,7 +159,7 @@ public class AdminImageGenerationService {
 
         try {
             byte[] referenceImage = restTemplate.getForObject(cdnUrlService.toPublicUrl(reference.getS3Url()), byte[].class);
-            String prompt = buildReferenceEditPrompt(character);
+            String prompt = characterImageService.buildReferenceEditPrompt(character);
             GeneratedCharacterImage generated = imageEditClient.generate(referenceImage, prompt);
             String s3Url = characterImageService.uploadGeneratedImage(
                     character,
@@ -223,11 +220,19 @@ public class AdminImageGenerationService {
         Long referenceCharacterId = referenceCharacter != null ? referenceCharacter.getId() : null;
 
         String status = resolveBookStatus(profile, referenceCandidates, characterAssets);
+        ProcessingJobResponseDTO fanoutJob = processingJobRepository
+                .findTopByBookIdAndPipelineTypeOrderByCreatedAtDesc(
+                        book.getId(),
+                        ProcessingPipelineType.IMAGE_GENERATION
+                )
+                .map(ProcessingJobResponseDTO::from)
+                .orElse(null);
 
         return AdminImageGenerationStatusResponseDTO.builder()
                 .bookId(book.getId())
                 .status(status)
                 .nextAction(resolveNextAction(status))
+                .fanoutJob(fanoutJob)
                 .referenceCharacter(AdminImageGenerationStatusResponseDTO.CharacterSummary.from(referenceCharacter))
                 .selectedReferenceCandidateId(selectedReferenceCandidateId)
                 .referenceCandidates(referenceCandidates.stream()
@@ -374,6 +379,17 @@ public class AdminImageGenerationService {
                 .orElseThrow(() -> new GeneralException(ErrorStatus.CHARACTER_NOT_FOUND));
     }
 
+    private void ensureNoActiveFanoutJob(Long bookId) {
+        processingJobRepository.findFirstByBookIdAndPipelineTypeAndStatusInOrderByCreatedAtDesc(
+                        bookId,
+                        ProcessingPipelineType.IMAGE_GENERATION,
+                        EnumSet.of(ProcessingJobStatus.QUEUED, ProcessingJobStatus.PROCESSING)
+                )
+                .ifPresent(job -> {
+                    throw new GeneralException(ErrorStatus.IMAGE_FANOUT_JOB_ACTIVE);
+                });
+    }
+
     private void ensureReferenceCandidate(CharacterImageAsset asset) {
         if (asset.getAssetRole() != CharacterImageAssetRole.REFERENCE_CANDIDATE) {
             throw new GeneralException(
@@ -399,16 +415,9 @@ public class AdminImageGenerationService {
                 || status == CharacterImageAssetStatus.PUBLISHED;
     }
 
-    private String buildReferenceEditPrompt(Character character) {
-        return "Use the input image as the book-wide visual style reference. " +
-                "Keep the same illustration style, framing, background simplicity, palette, and rendering quality. " +
-                "Create only the target character below as a distinct person, without copying the reference person's identity. " +
-                characterImageService.buildImagePrompt(character);
-    }
-
     private String resolveTextImageModel() {
         String configured = normalize(imageProperties.getModel());
-        return configured != null ? configured : "gpt-image-1";
+        return configured != null ? configured : "gpt-image-2";
     }
 
     private String normalize(String value) {

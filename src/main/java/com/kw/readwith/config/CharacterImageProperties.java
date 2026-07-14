@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "character-image")
 public class CharacterImageProperties {
 
-    private String model = "gpt-image-1";
-    private String editModel = "gpt-image-1";
+    private String model = "gpt-image-2";
+    private String editModel = "gpt-image-2";
     private String quality = "medium";
     private int width = 1024;
     private int height = 1024;
@@ -48,5 +48,10 @@ public class CharacterImageProperties {
      * 기본값: 10명
      */
     private int batchSize = 10;
+
+    /**
+     * OpenAI Batch 상태를 다시 확인하는 간격입니다.
+     */
+    private long batchPollIntervalMs = 30000;
 }
 

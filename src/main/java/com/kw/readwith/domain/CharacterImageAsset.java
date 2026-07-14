@@ -4,6 +4,7 @@ import com.kw.readwith.domain.common.BaseEntity;
 import com.kw.readwith.domain.enums.CharacterImageAssetRole;
 import com.kw.readwith.domain.enums.CharacterImageAssetStatus;
 import com.kw.readwith.domain.enums.CharacterImageGenerationMode;
+import com.kw.readwith.domain.processing.ProcessingJob;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -55,6 +56,10 @@ public class CharacterImageAsset extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_reference_asset_id")
     private CharacterImageAsset sourceReferenceAsset;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "processing_job_id")
+    private ProcessingJob processingJob;
 
     @Column(name = "reference_version", nullable = false)
     @Builder.Default
@@ -164,6 +169,7 @@ public class CharacterImageAsset extends BaseEntity {
         this.assetRole = CharacterImageAssetRole.CHARACTER_IMAGE;
         this.generationMode = CharacterImageGenerationMode.REFERENCE_EDIT;
         this.sourceReferenceAsset = sourceReferenceAsset;
+        this.processingJob = null;
         this.referenceVersion = referenceVersion;
         this.slotNo = null;
         this.status = CharacterImageAssetStatus.GENERATING;
@@ -175,5 +181,11 @@ public class CharacterImageAsset extends BaseEntity {
         this.openaiRequestId = null;
         this.publishedAt = null;
         this.attemptNo += 1;
+    }
+
+    public void assignProcessingJob(ProcessingJob processingJob, String model, String promptHash) {
+        this.processingJob = processingJob;
+        this.model = model;
+        this.promptHash = promptHash;
     }
 }

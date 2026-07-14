@@ -44,6 +44,16 @@ public class CdnUrlService {
         return isAllowedPublicKey(stripLeadingSlash(value.trim()));
     }
 
+    public boolean isCdnUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String cloudFrontBaseUrl = trimTrailingSlash(artifactStorageProperties.getCloudFrontBaseUrl());
+        String normalized = value.trim();
+        return !cloudFrontBaseUrl.isBlank()
+                && (normalized.equals(cloudFrontBaseUrl) || normalized.startsWith(cloudFrontBaseUrl + "/"));
+    }
+
     private Optional<String> resolvePublicObjectKey(String value) {
         String keyCandidate = stripLeadingSlash(value);
         if (isAllowedPublicKey(keyCandidate)) {

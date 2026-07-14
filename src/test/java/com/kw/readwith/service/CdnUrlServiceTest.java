@@ -57,4 +57,12 @@ class CdnUrlServiceTest {
 
         assertThat(result).isEqualTo("https://example.com/image.png");
     }
+
+    @Test
+    void isCdnUrl_acceptsOnlyConfiguredCloudFrontOrigin() {
+        assertThat(cdnUrlService.isCdnUrl("https://cdn.readwith.store/character-images/1/10.png")).isTrue();
+        assertThat(cdnUrlService.isCdnUrl(
+                "https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/1/10.png"
+        )).isFalse();
+    }
 }

@@ -103,7 +103,7 @@ public class OpenAiImageEditClient {
             return editModel;
         }
         String model = normalize(imageProperties.getModel());
-        return model != null ? model : "gpt-image-1";
+        return model != null ? model : "gpt-image-2";
     }
 
     private String normalize(String value) {

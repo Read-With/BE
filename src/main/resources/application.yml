@@ -66,7 +66,7 @@ spring:
       api-key: ${OPENAI_API_KEY}
       image:
         options:
-          model: ${CHARACTER_IMAGE_MODEL:gpt-image-1}
+          model: ${CHARACTER_IMAGE_MODEL:gpt-image-2}
           size: ${CHARACTER_IMAGE_SIZE:1024x1024}
           quality: ${CHARACTER_IMAGE_QUALITY:medium}
           n: ${CHARACTER_IMAGE_COUNT:1}
@@ -127,8 +127,8 @@ cloud:
 # 캐릭터 이미지 생성 설정
 character-image:
   fallback-url: https://readwith-s3-bucket.s3.ap-northeast-2.amazonaws.com/character-images/default-character.jpg
-  model: ${CHARACTER_IMAGE_MODEL:gpt-image-1}
-  edit-model: ${CHARACTER_IMAGE_EDIT_MODEL:${CHARACTER_IMAGE_MODEL:gpt-image-1}}
+  model: ${CHARACTER_IMAGE_MODEL:gpt-image-2}
+  edit-model: ${CHARACTER_IMAGE_EDIT_MODEL:${CHARACTER_IMAGE_MODEL:gpt-image-2}}
   quality: ${CHARACTER_IMAGE_QUALITY:medium}
   width: ${CHARACTER_IMAGE_WIDTH:1024}
   height: ${CHARACTER_IMAGE_HEIGHT:1024}
@@ -215,6 +215,7 @@ character-image:
     REMEMBER: This is a SIMPLE HEAD PORTRAIT ONLY. The person's face is THE ONLY element. Everything else must be plain beige paper. If the image model tries to add ANY decoration, pattern, symbol, or ornament - REJECT and keep background COMPLETELY PLAIN."
 
   s3-path: character-images
+  batch-poll-interval-ms: ${CHARACTER_IMAGE_BATCH_POLL_INTERVAL_MS:30000}
 
   # OpenAI API Rate Limit 방지 설정
   delay-between-requests-ms: 2000 # 각 요청 사이 2초 대기

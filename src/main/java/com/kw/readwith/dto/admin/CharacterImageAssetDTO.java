@@ -59,7 +59,7 @@ public class CharacterImageAssetDTO {
     @Schema(description = "S3 공개 URL", nullable = true)
     private String s3Url;
 
-    @Schema(description = "사용 모델", nullable = true, example = "gpt-image-1")
+    @Schema(description = "사용 모델", nullable = true, example = "gpt-image-2")
     private String model;
 
     @Schema(description = "참조 asset ID", nullable = true)

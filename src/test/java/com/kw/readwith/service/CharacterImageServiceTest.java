@@ -85,7 +85,7 @@ class CharacterImageServiceTest {
                 .build();
 
         when(imageProperties.getFallbackUrl()).thenReturn("https://cdn.readwith.store/character/default.png");
-        when(imageProperties.getModel()).thenReturn("gpt-image-1");
+        when(imageProperties.getModel()).thenReturn("gpt-image-2");
         when(imageProperties.getQuality()).thenReturn("medium");
         when(imageProperties.getWidth()).thenReturn(1024);
         when(imageProperties.getHeight()).thenReturn(1024);
@@ -155,6 +155,18 @@ class CharacterImageServiceTest {
     }
 
     @Test
+    @DisplayName("reference edit prompt locks the book-wide visual style while preserving target identity")
+    void buildReferenceEditPrompt_appliesSeriesLock() {
+        String prompt = characterImageService.buildReferenceEditPrompt(testCharacter);
+
+        assertThat(prompt)
+                .contains("immutable visual bible for this book series")
+                .contains("Keep these style attributes consistent across every character portrait")
+                .contains("Do not copy the reference person's face")
+                .contains("middle-aged man, pale complexion");
+    }
+
+    @Test
     @DisplayName("generateAndSaveImage uploads generated image using current bookPrompt")
     void generateAndSaveImage_succeeds() throws Exception {
         Path tempImage = Files.createTempFile("character-image-test-", ".png");
@@ -178,7 +190,7 @@ class CharacterImageServiceTest {
         ArgumentCaptor<ImagePrompt> imagePromptCaptor = ArgumentCaptor.forClass(ImagePrompt.class);
         verify(imageModel).call(imagePromptCaptor.capture());
         OpenAiImageOptions imageOptions = (OpenAiImageOptions) imagePromptCaptor.getValue().getOptions();
-        assertThat(imageOptions.getModel()).isEqualTo("gpt-image-1");
+        assertThat(imageOptions.getModel()).isEqualTo("gpt-image-2");
         assertThat(imageOptions.getQuality()).isEqualTo("medium");
         assertThat(imageOptions.getWidth()).isEqualTo(1024);
         assertThat(imageOptions.getHeight()).isEqualTo(1024);
@@ -192,7 +204,7 @@ class CharacterImageServiceTest {
     }
 
     @Test
-    @DisplayName("generateAndSaveImage uploads gpt-image-1 base64 response")
+    @DisplayName("generateAndSaveImage uploads gpt-image-2 base64 response")
     void generateAndSaveImage_uploadsBase64JsonResponse() {
         byte[] generatedImage = new byte[]{9, 8, 7, 6};
 

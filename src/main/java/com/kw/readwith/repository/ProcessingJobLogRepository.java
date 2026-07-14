@@ -8,12 +8,15 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.domain.Pageable;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface ProcessingJobLogRepository extends JpaRepository<ProcessingJobLog, Long> {
 
     long countByJobId(Long jobId);
 
     List<ProcessingJobLog> findAllByJobIdOrderBySeqAsc(Long jobId);
+
+    Optional<ProcessingJobLog> findTopByJobIdOrderBySeqDesc(Long jobId);
 
     List<ProcessingJobLog> findAllByOrderByIdDesc(Pageable pageable);
 

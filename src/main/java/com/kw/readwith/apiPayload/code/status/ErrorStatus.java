@@ -63,6 +63,8 @@ public enum ErrorStatus implements BaseErrorCode {
     INVALID_IMAGE_PUBLISH_POLICY(HttpStatus.BAD_REQUEST, "ADMIN4025", "잘못된 이미지 게시 정책입니다. 허용값: AUTO_AFTER_QA, MANUAL"),
     IMAGE_REFERENCE_CHARACTER_REQUIRED(HttpStatus.BAD_REQUEST, "ADMIN4026", "대표 이미지 후보로 사용할 인물을 찾을 수 없습니다."),
     BOOK_DELETE_JOB_IN_PROGRESS(HttpStatus.CONFLICT, "ADMIN4027", "진행 중인 처리 job이 있어 책을 삭제할 수 없습니다."),
+    IMAGE_FANOUT_JOB_ACTIVE(HttpStatus.CONFLICT, "ADMIN4028", "해당 책의 캐릭터 이미지 fan-out job이 이미 진행 중입니다."),
+    IMAGE_FANOUT_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4029", "캐릭터 이미지 fan-out job을 찾을 수 없습니다."),
     IMAGE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ADMIN5020", "캐릭터 이미지 생성에 실패했습니다."),
 
     // Bookmark
