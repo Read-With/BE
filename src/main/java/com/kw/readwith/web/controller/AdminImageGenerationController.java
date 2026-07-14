@@ -95,6 +95,8 @@ public class AdminImageGenerationController {
             summary = "대표 후보사진 1장 선택 및 전체 fan-out",
             description = """
                     관리자가 대표 후보사진 4장 중 마음에 드는 1장을 선택할 때 호출합니다.
+                    candidateId에는 상태 조회 또는 후보 생성 응답의 referenceCandidates[].id에 담긴 asset DB ID를 전달합니다.
+                    referenceCandidates[].slotNo(1~4)는 화면 표시용 슬롯 번호이며 candidateId로 사용할 수 없습니다.
                     선택된 후보는 책의 active reference image가 되고, 대표 캐릭터의 게시 이미지로 즉시 반영됩니다.
                     이후 서버가 같은 reference image를 입력 이미지로 사용해 나머지 모든 캐릭터 이미지를 fan-out 생성합니다.
                     후보가 생성 완료 상태가 아니거나 다른 책의 asset이면 ADMIN4021 또는 ADMIN4022 오류가 발생합니다.
@@ -119,7 +121,11 @@ public class AdminImageGenerationController {
     public ApiResponse<AdminImageGenerationStatusResponseDTO> selectReferenceCandidate(
             @Parameter(description = "대표 후보사진을 선택할 책 ID", required = true, example = "1")
             @PathVariable Long bookId,
-            @Parameter(description = "선택할 대표 후보사진 asset ID", required = true, example = "101")
+            @Parameter(
+                    description = "선택할 대표 후보사진의 asset DB ID. referenceCandidates[].id 값을 전달하며 slotNo(1~4)가 아닙니다.",
+                    required = true,
+                    example = "101"
+            )
             @PathVariable Long candidateId) {
         AdminImageGenerationStatusResponseDTO response = adminImageGenerationService.selectReferenceCandidate(bookId, candidateId);
         return ApiResponse.onSuccess(response);

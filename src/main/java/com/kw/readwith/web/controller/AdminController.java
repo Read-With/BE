@@ -19,6 +19,9 @@ import com.kw.readwith.service.normalization.NormalizationJobDispatcher;
 import com.kw.readwith.service.normalization.NormalizationJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -55,10 +58,33 @@ public class AdminController {
         return ApiResponse.onSuccess(response);
     }
 
-    @Operation(summary = "Delete book", description = "Deletes a book and its analysis artifacts from the database. Active processing jobs block deletion.")
+    @Operation(
+            summary = "관리자 도서 삭제",
+            description = """
+                    관리자 권한으로 도서와 해당 도서에 종속된 분석 데이터, 이미지 asset 메타데이터, 사용자 읽기 상태를 DB에서 삭제합니다.
+                    QUEUED 또는 PROCESSING 상태의 처리 job이 하나라도 있으면 삭제하지 않고 ADMIN4027 오류를 반환합니다.
+                    DB 데이터만 삭제하며 S3에 저장된 EPUB와 이미지 객체는 이 API의 삭제 대상이 아닙니다.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "도서와 종속 DB 데이터 삭제 성공",
+                    content = @Content(schema = @Schema(implementation = String.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "PROGRESS4001: 해당 책을 찾을 수 없습니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "ADMIN4027: 진행 중인 처리 job이 있어 책을 삭제할 수 없습니다."
+            )
+    })
     @DeleteMapping("/books/{bookId}")
     public ApiResponse<String> deleteBook(
-            @Parameter(description = "Book ID to delete", required = true) @PathVariable Long bookId) {
+            @Parameter(description = "삭제할 도서의 DB ID", required = true, example = "24")
+            @PathVariable Long bookId) {
         adminService.deleteBook(bookId);
         return ApiResponse.onSuccess("Book has been successfully deleted.");
     }
