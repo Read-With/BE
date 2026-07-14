@@ -57,6 +57,9 @@ class FineGraphServiceTest {
     @Mock
     private LocatorSupport locatorSupport;
 
+    @Mock
+    private CdnUrlService cdnUrlService;
+
     private FineGraphService fineGraphService;
 
     @BeforeEach
@@ -70,7 +73,8 @@ class FineGraphServiceTest {
                 new ObjectMapper(),
                 transitionGuard,
                 bookAccessPolicy,
-                locatorSupport
+                locatorSupport,
+                cdnUrlService
         );
     }
 

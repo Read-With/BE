@@ -53,6 +53,9 @@ class MacroGraphServiceTest {
     @Mock
     private LocatorSupport locatorSupport;
 
+    @Mock
+    private CdnUrlService cdnUrlService;
+
     private MacroGraphService macroGraphService;
 
     @BeforeEach
@@ -65,7 +68,8 @@ class MacroGraphServiceTest {
                 eventCharacterStatRepository,
                 new ObjectMapper(),
                 bookAccessPolicy,
-                locatorSupport
+                locatorSupport,
+                cdnUrlService
         );
     }
 

@@ -1,6 +1,7 @@
 package com.kw.readwith.dto.admin;
 
 import com.kw.readwith.domain.CharacterImageAsset;
+import com.kw.readwith.service.CdnUrlService;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -80,6 +81,10 @@ public class CharacterImageAssetDTO {
     private LocalDateTime publishedAt;
 
     public static CharacterImageAssetDTO from(CharacterImageAsset asset) {
+        return from(asset, null);
+    }
+
+    public static CharacterImageAssetDTO from(CharacterImageAsset asset, CdnUrlService cdnUrlService) {
         if (asset == null) {
             return null;
         }
@@ -92,7 +97,7 @@ public class CharacterImageAssetDTO {
                 .assetRole(asset.getAssetRole().name())
                 .generationMode(asset.getGenerationMode().name())
                 .status(asset.getStatus().name())
-                .s3Url(asset.getS3Url())
+                .s3Url(toPublicUrl(cdnUrlService, asset.getS3Url()))
                 .model(asset.getModel())
                 .sourceReferenceAssetId(asset.getSourceReferenceAsset() != null ? asset.getSourceReferenceAsset().getId() : null)
                 .referenceVersion(asset.getReferenceVersion())
@@ -101,5 +106,9 @@ public class CharacterImageAssetDTO {
                 .createdAt(asset.getCreatedAt())
                 .publishedAt(asset.getPublishedAt())
                 .build();
+    }
+
+    private static String toPublicUrl(CdnUrlService cdnUrlService, String value) {
+        return cdnUrlService == null ? value : cdnUrlService.toPublicUrl(value);
     }
 }

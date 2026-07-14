@@ -3,6 +3,7 @@ package com.kw.readwith.repository;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.Chapter;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,6 +23,9 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     Optional<Chapter> findByBookIdAndIdx(@Param("bookId") Long bookId, @Param("idx") int idx);
 
     List<Chapter> findByBookId(Long bookId);
+
+    @Modifying
+    int deleteByBook(Book book);
 
     /**
      * 특정 책의 최대 챕터 인덱스 조회

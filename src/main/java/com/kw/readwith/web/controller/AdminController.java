@@ -55,6 +55,14 @@ public class AdminController {
         return ApiResponse.onSuccess(response);
     }
 
+    @Operation(summary = "Delete book", description = "Deletes a book and its analysis artifacts from the database. Active processing jobs block deletion.")
+    @DeleteMapping("/books/{bookId}")
+    public ApiResponse<String> deleteBook(
+            @Parameter(description = "Book ID to delete", required = true) @PathVariable Long bookId) {
+        adminService.deleteBook(bookId);
+        return ApiResponse.onSuccess("Book has been successfully deleted.");
+    }
+
     @Operation(summary = "최근 정규화 Job 목록 조회", description = "최근에 진행된 정규화 작업 목록을 최신순으로 조회합니다.")
     @GetMapping("/normalization/jobs/latest")
     public ApiResponse<List<NormalizationJobResponseDTO>> getRecentNormalizationJobs() {

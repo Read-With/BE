@@ -9,6 +9,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import com.kw.readwith.config.AmazonConfig;
+import com.kw.readwith.service.CdnUrlService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,7 @@ public class AmazonS3Manager {
 
     private final AmazonS3 amazonS3;
     private final AmazonConfig amazonConfig;
+    private final CdnUrlService cdnUrlService;
 
     public String uploadFile(String keyName, MultipartFile file) {
         ObjectMetadata metadata = new ObjectMetadata();
@@ -94,6 +96,10 @@ public class AmazonS3Manager {
     }
 
     public String getObjectUrl(String keyName) {
+        String cdnUrl = cdnUrlService.toPublicUrl(keyName);
+        if (!cdnUrl.equals(keyName)) {
+            return cdnUrl;
+        }
         return amazonS3.getUrl(amazonConfig.getBucket(), keyName).toString();
     }
 

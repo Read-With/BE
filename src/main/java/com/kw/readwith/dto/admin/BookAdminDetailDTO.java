@@ -1,6 +1,7 @@
 package com.kw.readwith.dto.admin;
 
 import com.kw.readwith.domain.Book;
+import com.kw.readwith.service.CdnUrlService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -34,6 +35,10 @@ public class BookAdminDetailDTO {
     private LocalDateTime updatedAt;
 
     public static BookAdminDetailDTO from(Book book) {
+        return from(book, null);
+    }
+
+    public static BookAdminDetailDTO from(Book book, CdnUrlService cdnUrlService) {
         return BookAdminDetailDTO.builder()
                 .id(book.getId())
                 .title(book.getTitle())
@@ -41,7 +46,7 @@ public class BookAdminDetailDTO {
                 .language(book.getLanguage())
                 .isDefault(book.isDefault())
                 .summary(book.isSummary())
-                .coverImgUrl(book.getCoverImgUrl())
+                .coverImgUrl(toPublicUrl(cdnUrlService, book.getCoverImgUrl()))
                 .summaryUrl(book.getSummaryUrl())
                 .bookPrompt(book.getBookPrompt())
                 .epubPath(book.getEpubPath())
@@ -55,5 +60,9 @@ public class BookAdminDetailDTO {
                 .createdAt(book.getCreatedAt())
                 .updatedAt(book.getUpdatedAt())
                 .build();
+    }
+
+    private static String toPublicUrl(CdnUrlService cdnUrlService, String value) {
+        return cdnUrlService == null ? value : cdnUrlService.toPublicUrl(value);
     }
 }

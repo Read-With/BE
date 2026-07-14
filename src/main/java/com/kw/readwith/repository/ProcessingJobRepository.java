@@ -1,8 +1,10 @@
 package com.kw.readwith.repository;
 
+import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.enums.ProcessingJobStatus;
 import com.kw.readwith.domain.enums.ProcessingPipelineType;
 import com.kw.readwith.domain.processing.ProcessingJob;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import org.springframework.data.domain.Pageable;
@@ -27,4 +29,11 @@ public interface ProcessingJobRepository extends JpaRepository<ProcessingJob, Lo
             ProcessingPipelineType pipelineType,
             Pageable pageable
     );
+
+    boolean existsByBookIdAndStatusIn(Long bookId, Collection<ProcessingJobStatus> statuses);
+
+    List<ProcessingJob> findAllByBook(Book book);
+
+    @Modifying
+    int deleteByBook(Book book);
 }

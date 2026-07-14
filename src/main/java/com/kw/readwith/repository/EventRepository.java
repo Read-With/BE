@@ -42,6 +42,9 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     @Modifying
     int deleteByChapter(Chapter chapter);
 
+    @Modifying
+    int deleteByBook(Book book);
+
     /**
      * 특정 책의 각 챕터별 마지막 이벤트 조회 (거시 그래프용)
      */

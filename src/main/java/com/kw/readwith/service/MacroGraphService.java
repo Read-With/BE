@@ -44,6 +44,7 @@ public class MacroGraphService {
     private final ObjectMapper objectMapper;
     private final BookAccessPolicy bookAccessPolicy;
     private final LocatorSupport locatorSupport;
+    private final CdnUrlService cdnUrlService;
 
     public MacroGraphResponseDTO getMacroGraph(Long bookId, Integer uptoChapter, LocatorDTO uptoLocator, Long userId) {
         Book book = bookRepository.findById(bookId)
@@ -176,7 +177,7 @@ public class MacroGraphService {
                 .id(character.getCharacterId())
                 .label(character.getName())
                 .isMainCharacter(character.isMainCharacter())
-                .profileImage(character.getProfileImage())
+                .profileImage(cdnUrlService.toPublicUrl(character.getProfileImage()))
                 .description(truncateText(character.getPersonalityText(), 200))
                 .portraitPrompt(character.getProfileText())
                 .names(parseNames(character.getNames(), character.getName()))

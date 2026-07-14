@@ -73,6 +73,9 @@ class BookServiceTest {
     @Mock
     private NormalizationVersionService normalizationVersionService;
 
+    @Mock
+    private CdnUrlService cdnUrlService;
+
     @InjectMocks
     private BookService bookService;
 
@@ -81,6 +84,7 @@ class BookServiceTest {
         TransactionSynchronizationManager.initSynchronization();
         lenient().when(normalizationVersionService.resolveStatus(any(Book.class))).thenReturn(NormalizationVersionStatus.NOT_READY);
         lenient().when(normalizationVersionService.needsRenormalization(any(Book.class))).thenReturn(false);
+        lenient().when(cdnUrlService.toPublicUrl(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @AfterEach

@@ -3,6 +3,7 @@ package com.kw.readwith.repository;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.mapping.ChapterRelationshipEdge;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -31,4 +32,7 @@ public interface ChapterRelationshipEdgeRepository extends JpaRepository<Chapter
      * 특정 책의 특정 챕터의 관계 엣지 조회
      */
     List<ChapterRelationshipEdge> findByBookAndChapterIdx(Book book, Integer chapterIdx);
+
+    @Modifying
+    int deleteByBook(Book book);
 }
