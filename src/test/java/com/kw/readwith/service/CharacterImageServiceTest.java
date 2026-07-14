@@ -161,7 +161,7 @@ class CharacterImageServiceTest {
         Files.write(tempImage, new byte[]{1, 2, 3, 4});
 
         when(characterRepository.findByIdWithBook(testCharacter.getId())).thenReturn(Optional.of(testCharacter));
-        when(s3Manager.uploadFileFromBase64(anyString(), anyString(), eq("image/png")))
+        when(s3Manager.getObjectUrl("character-images/1/10.png"))
                 .thenReturn("https://cdn.readwith.store/character-images/1/10.png");
 
         ImageResponse imageResponse = mock(ImageResponse.class);
@@ -183,7 +183,7 @@ class CharacterImageServiceTest {
         assertThat(imageOptions.getWidth()).isEqualTo(1024);
         assertThat(imageOptions.getHeight()).isEqualTo(1024);
         assertThat(imageOptions.getN()).isEqualTo(1);
-        verify(s3Manager).uploadFileFromBase64(eq("character-images/1/10.png"), anyString(), eq("image/png"));
+        verify(s3Manager).uploadBytes(eq("character-images/1/10.png"), any(byte[].class), eq("image/png"));
         verify(transactionService).updateImageAndStatus(
                 testCharacter.getId(),
                 "https://cdn.readwith.store/character-images/1/10.png",
@@ -197,7 +197,7 @@ class CharacterImageServiceTest {
         byte[] generatedImage = new byte[]{9, 8, 7, 6};
 
         when(characterRepository.findByIdWithBook(testCharacter.getId())).thenReturn(Optional.of(testCharacter));
-        when(s3Manager.uploadFileFromBase64(anyString(), anyString(), eq("image/png")))
+        when(s3Manager.getObjectUrl("character-images/1/10.png"))
                 .thenReturn("https://cdn.readwith.store/character-images/1/10.png");
 
         ImageResponse imageResponse = mock(ImageResponse.class);
@@ -210,13 +210,13 @@ class CharacterImageServiceTest {
 
         characterImageService.generateAndSaveImage(testCharacter.getId());
 
-        ArgumentCaptor<String> base64Captor = ArgumentCaptor.forClass(String.class);
-        verify(s3Manager).uploadFileFromBase64(
+        ArgumentCaptor<byte[]> imageCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(s3Manager).uploadBytes(
                 eq("character-images/1/10.png"),
-                base64Captor.capture(),
+                imageCaptor.capture(),
                 eq("image/png")
         );
-        assertThat(Base64.getDecoder().decode(base64Captor.getValue())).containsExactly(generatedImage);
+        assertThat(imageCaptor.getValue()).containsExactly(generatedImage);
         verify(transactionService).updateImageAndStatus(
                 testCharacter.getId(),
                 "https://cdn.readwith.store/character-images/1/10.png",

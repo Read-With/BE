@@ -25,17 +25,17 @@ public class AsyncConfig implements AsyncConfigurer {
     public Executor imageGenerationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         
-        // 코어 스레드: 동시에 2개의 이미지만 생성
-        executor.setCorePoolSize(2);
+        // Render Free 512MB 환경에서는 이미지 생성을 한 번에 하나만 실행한다.
+        executor.setCorePoolSize(1);
         
-        // 최대 스레드: 부하가 높을 때 최대 3개까지 허용
-        executor.setMaxPoolSize(3);
+        executor.setMaxPoolSize(1);
         
-        // 대기 큐: 50개까지 대기 가능
-        executor.setQueueCapacity(50);
+        executor.setQueueCapacity(10);
         
         // 스레드 이름 prefix (로그 추적 용이)
         executor.setThreadNamePrefix("image-gen-");
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(60);
         
         // 큐가 가득 찰 경우 호출한 스레드에서 직접 실행
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
@@ -50,9 +50,11 @@ public class AsyncConfig implements AsyncConfigurer {
     public Executor normalizationJobExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(2);
-        executor.setQueueCapacity(20);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(5);
         executor.setThreadNamePrefix("normalization-job-");
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(60);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
