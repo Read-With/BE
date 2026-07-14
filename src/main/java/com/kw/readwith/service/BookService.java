@@ -3,26 +3,22 @@ package com.kw.readwith.service;
 import com.kw.readwith.apiPayload.code.status.ErrorStatus;
 import com.kw.readwith.apiPayload.exception.GeneralException;
 import com.kw.readwith.domain.Book;
-import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.enums.NormalizationStatus;
-import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.dto.book.BookDetailDTO;
 import com.kw.readwith.dto.book.BookSummaryDTO;
 import com.kw.readwith.repository.BookRepository;
 import com.kw.readwith.repository.FavoriteRepository;
-import com.kw.readwith.repository.UserRepository;
+import com.kw.readwith.service.BookUploadTransactionService.BookUploadCompletion;
 import com.kw.readwith.service.normalization.EpubMetadataExtractorService;
 import com.kw.readwith.service.normalization.ExtractedEpubMetadata;
 import com.kw.readwith.service.normalization.NormalizationJobDispatcher;
-import com.kw.readwith.service.normalization.NormalizationJobService;
 import com.kw.readwith.service.normalization.NormalizedArtifactStorageService;
 import com.kw.readwith.service.normalization.NormalizationVersionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -37,12 +33,11 @@ public class BookService {
 
     private final BookRepository bookRepository;
     private final FavoriteRepository favoriteRepository;
-    private final UserRepository userRepository;
     private final EpubMetadataExtractorService epubMetadataExtractorService;
     private final NormalizedArtifactStorageService normalizedArtifactStorageService;
-    private final NormalizationJobService normalizationJobService;
     private final NormalizationJobDispatcher normalizationJobDispatcher;
     private final NormalizationVersionService normalizationVersionService;
+    private final BookUploadTransactionService bookUploadTransactionService;
     private final CdnUrlService cdnUrlService;
 
     public List<BookSummaryDTO> getBooks(String keyword,
@@ -117,7 +112,7 @@ public class BookService {
         return convertToDetailDTO(book, isFavorite);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public BookDetailDTO uploadBook(Long userId,
                                     MultipartFile epubFile,
                                     String title,
@@ -127,41 +122,42 @@ public class BookService {
             throw new GeneralException(ErrorStatus._BAD_REQUEST);
         }
 
-        User uploader = userRepository.findById(userId)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
-
         ExtractedEpubMetadata extractedMetadata = epubMetadataExtractorService.extract(epubFile);
         String resolvedTitle = resolveRequiredMetadata("title", extractedMetadata.title(), null);
         String resolvedAuthor = resolveRequiredMetadata("author", extractedMetadata.author(), null);
         String resolvedLanguage = resolveRequiredMetadata("language", extractedMetadata.language(), language);
 
-        Book book = Book.builder()
-                .title(resolvedTitle)
-                .author(resolvedAuthor)
-                .language(resolvedLanguage)
-                .isDefault(false)
-                .coverImgUrl(null)
-                .uploadedBy(uploader)
-                .summary(false)
-                .build();
-
-        Book savedBook = bookRepository.save(book);
+        Book savedBook = bookUploadTransactionService.createUploadBook(
+                userId,
+                resolvedTitle,
+                resolvedAuthor,
+                resolvedLanguage
+        );
         String sourceVersion = normalizedArtifactStorageService.newSourceVersion();
-        String sourcePath = normalizedArtifactStorageService.storeSourceEpub(savedBook.getId(), sourceVersion, epubFile);
-        savedBook.assignUploadedSource(sourcePath);
-        storeCoverImageIfPresent(savedBook, sourceVersion, extractedMetadata);
-        savedBook.markNormalizationQueued();
-        savedBook.resetAnalysisStatus();
+        String sourcePath;
+        try {
+            sourcePath = normalizedArtifactStorageService.storeSourceEpub(savedBook.getId(), sourceVersion, epubFile);
+        } catch (RuntimeException e) {
+            markUploadFailedQuietly(savedBook.getId());
+            throw e;
+        }
+        String coverUrl = storeCoverImageIfPresent(savedBook.getId(), sourceVersion, extractedMetadata);
 
-        ProcessingJob job = normalizationJobService.createQueuedJob(savedBook, sourceVersion, "UPLOAD");
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                normalizationJobDispatcher.dispatch(job.getId());
-            }
-        });
+        BookUploadCompletion completion;
+        try {
+            completion = bookUploadTransactionService.completeUpload(
+                    savedBook.getId(),
+                    sourceVersion,
+                    sourcePath,
+                    coverUrl
+            );
+        } catch (RuntimeException e) {
+            markUploadFailedQuietly(savedBook.getId());
+            throw e;
+        }
+        normalizationJobDispatcher.dispatch(completion.jobId());
 
-        return convertToDetailDTO(savedBook, false);
+        return convertToDetailDTO(completion.book(), false);
     }
 
     private BookDetailDTO convertToDetailDTO(Book book, boolean isFavorite) {
@@ -190,15 +186,23 @@ public class BookService {
         return value == null ? null : value.name();
     }
 
-    private void storeCoverImageIfPresent(Book book, String sourceVersion, ExtractedEpubMetadata extractedMetadata) {
+    private String storeCoverImageIfPresent(Long bookId, String sourceVersion, ExtractedEpubMetadata extractedMetadata) {
         if (extractedMetadata.cover() == null || extractedMetadata.cover().isEmpty()) {
-            return;
+            return null;
         }
         try {
-            String coverUrl = normalizedArtifactStorageService.storeBookCover(book.getId(), sourceVersion, extractedMetadata.cover());
-            book.updateCoverImage(coverUrl);
+            return normalizedArtifactStorageService.storeBookCover(bookId, sourceVersion, extractedMetadata.cover());
         } catch (RuntimeException e) {
-            log.warn("Failed to store EPUB cover image. bookId={}, sourceVersion={}", book.getId(), sourceVersion, e);
+            log.warn("Failed to store EPUB cover image. bookId={}, sourceVersion={}", bookId, sourceVersion, e);
+            return null;
+        }
+    }
+
+    private void markUploadFailedQuietly(Long bookId) {
+        try {
+            bookUploadTransactionService.markUploadFailed(bookId);
+        } catch (RuntimeException nested) {
+            log.warn("Failed to mark upload as failed. bookId={}", bookId, nested);
         }
     }
 
