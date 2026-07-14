@@ -26,6 +26,7 @@ public class FavoriteService {
     private final BookRepository bookRepository;
     private final BookAccessPolicy bookAccessPolicy;
     private final NormalizationVersionService normalizationVersionService;
+    private final CdnUrlService cdnUrlService;
 
     @Transactional
     public void addFavorite(Long userId, Long bookId) {
@@ -62,7 +63,7 @@ public class FavoriteService {
                         .id(book.getId())
                         .title(book.getTitle())
                         .author(book.getAuthor())
-                        .coverImgUrl(book.getCoverImgUrl())
+                        .coverImgUrl(cdnUrlService.toPublicUrl(book.getCoverImgUrl()))
                         .epubPath(book.getEpubPath())
                         .normalizationStatus(enumName(book.getNormalizationStatus()))
                         .analysisStatus(enumName(book.getAnalysisStatus()))

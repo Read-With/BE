@@ -8,6 +8,8 @@ import com.kw.readwith.domain.Chapter;
 import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.Event;
 import com.kw.readwith.domain.enums.ImageGenerationStatus;
+import com.kw.readwith.domain.enums.ProcessingJobStatus;
+import com.kw.readwith.domain.processing.ProcessingJob;
 import com.kw.readwith.domain.mapping.CharacterPovSummary;
 import com.kw.readwith.domain.mapping.EventCharacterStat;
 import com.kw.readwith.domain.mapping.EventRelationshipEdge;
@@ -32,6 +34,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -59,6 +62,15 @@ public class AdminService {
     private final EventRelationshipEdgeRepository eventRelationshipEdgeRepository;
     private final CharacterPovSummaryRepository characterPovSummaryRepository;
     private final EventCharacterStatRepository statRepository;
+    private final ChapterCharacterStatRepository chapterCharacterStatRepository;
+    private final ChapterRelationshipEdgeRepository chapterRelationshipEdgeRepository;
+    private final CharacterImageAssetRepository characterImageAssetRepository;
+    private final BookCharacterImageProfileRepository bookCharacterImageProfileRepository;
+    private final FavoriteRepository favoriteRepository;
+    private final BookmarkRepository bookmarkRepository;
+    private final UserReadStateRepository userReadStateRepository;
+    private final ProcessingJobRepository processingJobRepository;
+    private final ProcessingJobLogRepository processingJobLogRepository;
     private final ObjectMapper objectMapper;
     private final CharacterImageService characterImageService;
     private final BookAnalysisStatusService bookAnalysisStatusService;
@@ -66,6 +78,7 @@ public class AdminService {
     private final V2TransitionGuard transitionGuard;
     private final NormalizationVersionService normalizationVersionService;
     private final NormalizedArtifactStorageService normalizedArtifactStorageService;
+    private final CdnUrlService cdnUrlService;
     
     @PersistenceContext
     private EntityManager entityManager;
@@ -758,7 +771,7 @@ public class AdminService {
      */
     public List<BookAdminDetailDTO> getAllBooks() {
         return bookRepository.findAll().stream()
-                .map(BookAdminDetailDTO::from)
+                .map(book -> BookAdminDetailDTO.from(book, cdnUrlService))
                 .collect(Collectors.toList());
     }
 
@@ -774,7 +787,7 @@ public class AdminService {
                         .id(book.getId())
                         .title(book.getTitle())
                         .author(book.getAuthor())
-                        .coverImgUrl(book.getCoverImgUrl())
+                        .coverImgUrl(cdnUrlService.toPublicUrl(book.getCoverImgUrl()))
                         .epubPath(book.getEpubPath())
                         .normalizationStatus(book.getNormalizationStatus() != null ? book.getNormalizationStatus().name() : null)
                         .analysisStatus(book.getAnalysisStatus() != null ? book.getAnalysisStatus().name() : null)
@@ -813,7 +826,7 @@ public class AdminService {
                         .id(character.getId())
                         .characterId(String.valueOf(character.getCharacterId()))
                         .commonName(character.getName())
-                        .profileImage(character.getProfileImage())
+                        .profileImage(cdnUrlService.toPublicUrl(character.getProfileImage()))
                         .imageGenerationStatus(character.getImageGenerationStatus() != null ? character.getImageGenerationStatus().name() : null)
                         .build())
                 .collect(Collectors.toList());
@@ -862,6 +875,45 @@ public class AdminService {
     /**
      * ?諭??筌?굞肉???곷립 筌뤴뫀諭??源놁삢?紐꺪???????몃빍??
      */
+    @Transactional
+    public void deleteBook(Long bookId) {
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BOOK_NOT_FOUND));
+
+        boolean hasActiveJob = processingJobRepository.existsByBookIdAndStatusIn(
+                bookId,
+                EnumSet.of(ProcessingJobStatus.QUEUED, ProcessingJobStatus.PROCESSING)
+        );
+        if (hasActiveJob) {
+            throw new GeneralException(ErrorStatus.BOOK_DELETE_JOB_IN_PROGRESS);
+        }
+
+        List<ProcessingJob> jobs = processingJobRepository.findAllByBook(book);
+        if (!jobs.isEmpty()) {
+            processingJobLogRepository.deleteByJobIn(jobs);
+        }
+        processingJobRepository.deleteByBook(book);
+
+        bookCharacterImageProfileRepository.deleteByBook(book);
+        characterImageAssetRepository.clearSourceReferencesByBook(book);
+        characterImageAssetRepository.deleteByBook(book);
+
+        eventRelationshipEdgeRepository.deleteByBook(book);
+        statRepository.deleteByBook(book);
+        chapterRelationshipEdgeRepository.deleteByBook(book);
+        characterPovSummaryRepository.deleteByBook(book);
+        chapterCharacterStatRepository.deleteByBook(book);
+
+        favoriteRepository.deleteByBook(book);
+        bookmarkRepository.deleteByBook(book);
+        userReadStateRepository.deleteByBook(book);
+
+        eventRepository.deleteByBook(book);
+        characterRepository.deleteByBook(book);
+        chapterRepository.deleteByBook(book);
+        bookRepository.delete(book);
+    }
+
     @Transactional
     public int deleteCharacters(Long bookId) {
         Book book = bookRepository.findById(bookId)

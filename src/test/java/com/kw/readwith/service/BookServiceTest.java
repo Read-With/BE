@@ -63,6 +63,9 @@ class BookServiceTest {
     @Mock
     private BookUploadTransactionService bookUploadTransactionService;
 
+    @Mock
+    private CdnUrlService cdnUrlService;
+
     @InjectMocks
     private BookService bookService;
 
@@ -70,6 +73,7 @@ class BookServiceTest {
     void setUp() {
         lenient().when(normalizationVersionService.resolveStatus(any(Book.class))).thenReturn(NormalizationVersionStatus.NOT_READY);
         lenient().when(normalizationVersionService.needsRenormalization(any(Book.class))).thenReturn(false);
+        lenient().when(cdnUrlService.toPublicUrl(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test

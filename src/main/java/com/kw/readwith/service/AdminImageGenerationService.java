@@ -51,6 +51,7 @@ public class AdminImageGenerationService {
     private final OpenAiImageEditClient imageEditClient;
     private final CharacterImageProperties imageProperties;
     private final RestTemplate restTemplate;
+    private final CdnUrlService cdnUrlService;
 
     public AdminImageGenerationStatusResponseDTO getBookStatus(Long bookId) {
         Book book = getBook(bookId);
@@ -160,7 +161,7 @@ public class AdminImageGenerationService {
         CharacterImageAsset asset = getOrCreateCharacterImageAsset(character, reference, referenceVersion);
 
         try {
-            byte[] referenceImage = restTemplate.getForObject(reference.getS3Url(), byte[].class);
+            byte[] referenceImage = restTemplate.getForObject(cdnUrlService.toPublicUrl(reference.getS3Url()), byte[].class);
             String prompt = buildReferenceEditPrompt(character);
             GeneratedCharacterImage generated = imageEditClient.generate(referenceImage, prompt);
             String s3Url = characterImageService.uploadGeneratedImage(
@@ -232,14 +233,16 @@ public class AdminImageGenerationService {
                 .referenceCandidates(referenceCandidates.stream()
                         .map(asset -> AdminImageGenerationStatusResponseDTO.ReferenceCandidate.from(
                                 asset,
-                                selectedReferenceCandidateId
+                                selectedReferenceCandidateId,
+                                cdnUrlService
                         ))
                         .toList())
                 .characters(characters.stream()
                         .map(character -> AdminImageGenerationStatusResponseDTO.CharacterImage.from(
                                 character,
                                 characterAssets.get(character.getId()),
-                                referenceCharacterId
+                                referenceCharacterId,
+                                cdnUrlService
                         ))
                         .toList())
                 .build();

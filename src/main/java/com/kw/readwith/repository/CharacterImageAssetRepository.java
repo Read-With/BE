@@ -67,4 +67,11 @@ public interface CharacterImageAssetRepository extends JpaRepository<CharacterIm
     int markDerivedAssetsStale(@Param("book") Book book,
                                @Param("sourceReferenceAsset") CharacterImageAsset sourceReferenceAsset,
                                @Param("statuses") Collection<CharacterImageAssetStatus> statuses);
+
+    @Modifying
+    @Query("UPDATE CharacterImageAsset a SET a.sourceReferenceAsset = null WHERE a.book = :book")
+    int clearSourceReferencesByBook(@Param("book") Book book);
+
+    @Modifying
+    int deleteByBook(Book book);
 }

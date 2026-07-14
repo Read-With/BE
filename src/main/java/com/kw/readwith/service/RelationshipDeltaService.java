@@ -54,6 +54,7 @@ public class RelationshipDeltaService {
     private final ObjectMapper objectMapper;
     private final BookAccessPolicy bookAccessPolicy;
     private final LocatorSupport locatorSupport;
+    private final CdnUrlService cdnUrlService;
 
     public RelationshipDeltaListResponseDTO getRelationshipDeltas(
             Long bookId,
@@ -361,7 +362,7 @@ public class RelationshipDeltaService {
                     .id(character.getCharacterId())
                     .label(character.getName())
                     .isMainCharacter(character.isMainCharacter())
-                    .profileImage(character.getProfileImage())
+                    .profileImage(cdnUrlService.toPublicUrl(character.getProfileImage()))
                     .description(truncateText(character.getPersonalityText(), 200))
                     .portraitPrompt(character.getProfileText())
                     .names(parseNames(character.getNames(), character.getName()))

@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -66,6 +67,8 @@ class AdminImageGenerationServiceTest {
     private CharacterImageProperties imageProperties;
     @Mock
     private RestTemplate restTemplate;
+    @Mock
+    private CdnUrlService cdnUrlService;
 
     private Book book;
     private Character mainCharacter;
@@ -98,6 +101,7 @@ class AdminImageGenerationServiceTest {
                 .isMainCharacter(false)
                 .imageGenerationStatus(ImageGenerationStatus.PENDING)
                 .build();
+        lenient().when(cdnUrlService.toPublicUrl(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test

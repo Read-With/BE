@@ -7,6 +7,7 @@ import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.User;
 import com.kw.readwith.domain.mapping.UserReadState;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -25,4 +26,7 @@ public interface UserReadStateRepository extends JpaRepository<UserReadState, Lo
     
     // 사용자의 특정 책 읽기 상태 삭제
     void deleteByUserIdAndBookId(Long userId, Long bookId);
+
+    @Modifying
+    int deleteByBook(Book book);
 }

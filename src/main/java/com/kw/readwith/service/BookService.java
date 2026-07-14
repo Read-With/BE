@@ -38,6 +38,7 @@ public class BookService {
     private final NormalizationJobDispatcher normalizationJobDispatcher;
     private final NormalizationVersionService normalizationVersionService;
     private final BookUploadTransactionService bookUploadTransactionService;
+    private final CdnUrlService cdnUrlService;
 
     public List<BookSummaryDTO> getBooks(String keyword,
                                          String language,
@@ -83,7 +84,7 @@ public class BookService {
                         .id(book.getId())
                         .title(book.getTitle())
                         .author(book.getAuthor())
-                        .coverImgUrl(book.getCoverImgUrl())
+                        .coverImgUrl(cdnUrlService.toPublicUrl(book.getCoverImgUrl()))
                         .epubPath(book.getEpubPath())
                         .normalizationStatus(enumName(book.getNormalizationStatus()))
                         .analysisStatus(enumName(book.getAnalysisStatus()))
@@ -166,7 +167,7 @@ public class BookService {
                 .author(book.getAuthor())
                 .language(book.getLanguage())
                 .isDefault(book.isDefault())
-                .coverImgUrl(book.getCoverImgUrl())
+                .coverImgUrl(cdnUrlService.toPublicUrl(book.getCoverImgUrl()))
                 .epubPath(book.getEpubPath())
                 .normalizationStatus(enumName(book.getNormalizationStatus()))
                 .analysisStatus(enumName(book.getAnalysisStatus()))

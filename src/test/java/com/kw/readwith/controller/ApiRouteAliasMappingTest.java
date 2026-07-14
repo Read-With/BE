@@ -51,6 +51,7 @@ class ApiRouteAliasMappingTest {
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}/reference-candidates");
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}/reference-candidates/{candidateId}/select");
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}/characters/{characterId}/regenerate");
+        assertThat(paths).contains("/api/v2/admin/books/{bookId}");
         assertThat(paths).doesNotContain("/api/v2/admin/books/{bookId}/character-images/fanout");
         assertThat(paths).doesNotContain("/api/v2/admin/characters/{characterId}/image-candidates");
     }

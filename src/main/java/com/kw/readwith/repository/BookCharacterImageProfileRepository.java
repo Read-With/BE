@@ -3,6 +3,7 @@ package com.kw.readwith.repository;
 import com.kw.readwith.domain.Book;
 import com.kw.readwith.domain.BookCharacterImageProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -11,4 +12,7 @@ import java.util.Optional;
 public interface BookCharacterImageProfileRepository extends JpaRepository<BookCharacterImageProfile, Long> {
 
     Optional<BookCharacterImageProfile> findByBook(Book book);
+
+    @Modifying
+    int deleteByBook(Book book);
 }
