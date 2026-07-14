@@ -206,8 +206,8 @@ public class CharacterImageService {
     }
 
     public String uploadGeneratedImage(Character character, byte[] imageData, String s3KeyName) {
-        String base64Image = Base64.getEncoder().encodeToString(imageData);
-        return s3Manager.uploadFileFromBase64(s3KeyName, base64Image, "image/png");
+        s3Manager.uploadBytes(s3KeyName, imageData, "image/png");
+        return s3Manager.getObjectUrl(s3KeyName);
     }
 
     public String buildReferenceCandidateS3KeyName(Character character, Long assetId) {

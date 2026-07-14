@@ -2,6 +2,8 @@ server:
   port: ${PORT:8080}
 
 spring:
+  main:
+    lazy-initialization: ${SPRING_MAIN_LAZY_INITIALIZATION:true}
   datasource:
     url: ${DATABASE_URL:jdbc:mysql://${AWS_DB_URL}:3306/readwith_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=true&requireSSL=true}
     username: ${DATABASE_USERNAME:${AWS_DB_USERNAME}}
@@ -30,7 +32,7 @@ spring:
         use_sql_comments: true
         hbm2ddl:
           auto: validate
-        default_batch_fetch_size: 1000
+        default_batch_fetch_size: ${HIBERNATE_DEFAULT_BATCH_FETCH_SIZE:100}
         # 배치 INSERT 최적화 (성능 개선)
         jdbc:
           batch_size: 50
@@ -68,6 +70,12 @@ spring:
           size: ${CHARACTER_IMAGE_SIZE:1024x1024}
           quality: ${CHARACTER_IMAGE_QUALITY:medium}
           n: ${CHARACTER_IMAGE_COUNT:1}
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
 
 epub:
   normalization:
