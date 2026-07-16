@@ -220,6 +220,10 @@ public class CharacterImageService {
     }
 
     public String uploadGeneratedImage(Character character, byte[] imageData, String s3KeyName) {
+        return uploadGeneratedImage(imageData, s3KeyName);
+    }
+
+    public String uploadGeneratedImage(byte[] imageData, String s3KeyName) {
         s3Manager.uploadBytes(s3KeyName, imageData, "image/png");
         return s3Manager.getObjectUrl(s3KeyName);
     }
@@ -403,10 +407,22 @@ public class CharacterImageService {
     }
 
     public String buildPublishedS3KeyName(Character character, int referenceVersion, int attemptNo) {
-        return String.format("%s/%d/%d/reference-v%d/attempt-%d.png",
-                imageProperties.getS3Path(),
+        return buildPublishedS3KeyName(
                 character.getBook().getId(),
                 character.getId(),
+                referenceVersion,
+                attemptNo
+        );
+    }
+
+    public String buildPublishedS3KeyName(Long bookId,
+                                          Long characterId,
+                                          int referenceVersion,
+                                          int attemptNo) {
+        return String.format("%s/%d/%d/reference-v%d/attempt-%d.png",
+                imageProperties.getS3Path(),
+                bookId,
+                characterId,
                 referenceVersion,
                 attemptNo);
     }

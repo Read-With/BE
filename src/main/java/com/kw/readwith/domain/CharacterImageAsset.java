@@ -136,6 +136,11 @@ public class CharacterImageAsset extends BaseEntity {
         this.status = CharacterImageAssetStatus.FAILED;
     }
 
+    public void retryResultApplication() {
+        this.failureCode = null;
+        this.status = CharacterImageAssetStatus.GENERATING;
+    }
+
     public void markStaleReference() {
         this.status = CharacterImageAssetStatus.STALE_REFERENCE;
     }

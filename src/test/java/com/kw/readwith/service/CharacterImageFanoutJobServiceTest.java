@@ -48,6 +48,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CharacterImageFanoutJobService")
@@ -252,10 +253,9 @@ class CharacterImageFanoutJobServiceTest {
             ));
             return null;
         }).when(batchClient).streamResults(eq("file-output"), any());
-        given(characterImageService.buildPublishedS3KeyName(targetCharacter, 1, 1))
+        given(characterImageService.buildPublishedS3KeyName(20L, 101L, 1, 1))
                 .willReturn("character-images/20/101/reference-v1/attempt-1.png");
         given(characterImageService.uploadGeneratedImage(
-                eq(targetCharacter),
                 any(byte[].class),
                 eq("character-images/20/101/reference-v1/attempt-1.png")
         )).willReturn("https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png");
@@ -275,6 +275,56 @@ class CharacterImageFanoutJobServiceTest {
         verify(characterImageService).deleteReplacedGeneratedImage(
                 "https://cdn.readwith.store/character-images/20/101/reference-v0/attempt-1.png",
                 "https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png"
+        );
+    }
+
+    @Test
+    @DisplayName("reapplies a stored Batch output without submitting or charging for another Batch")
+    void retryResultApplication_reusesStoredBatchOutput() {
+        ProcessingJob job = ProcessingJob.builder()
+                .id(630L)
+                .book(book)
+                .pipelineType(ProcessingPipelineType.IMAGE_GENERATION)
+                .runId("character-image-fanout-run-3")
+                .artifactPath("character-images/20/fanout-jobs/run-3")
+                .externalJobId("batch-630")
+                .inputFileId("file-input")
+                .outputFileId("file-output")
+                .status(ProcessingJobStatus.FAILED)
+                .currentStep("completed_with_failures")
+                .failureCode("IMAGE_BATCH_PARTIAL_FAILURE")
+                .build();
+        CharacterImageAsset targetAsset = buildTargetAsset(730L, job);
+        targetAsset.fail("BATCH_IMAGE_PUBLISH_FAILED");
+        given(transactionManager.getTransaction(any())).willAnswer(invocation -> new SimpleTransactionStatus());
+        given(processingJobRepository.findByIdForUpdate(630L)).willReturn(Optional.of(job));
+        given(assetRepository.findByProcessingJobOrderByIdAsc(job)).willReturn(List.of(targetAsset));
+        given(assetRepository.findById(730L)).willReturn(Optional.of(targetAsset));
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<OpenAiImageBatchClient.OpenAiBatchImageResult> consumer = invocation.getArgument(1);
+            consumer.accept(new OpenAiImageBatchClient.OpenAiBatchImageResult(
+                    "character-image-asset-730", 200, "req-730", new byte[]{4, 5, 6}, null, null
+            ));
+            return null;
+        }).when(batchClient).streamResults(eq("file-output"), any());
+        given(characterImageService.buildPublishedS3KeyName(20L, 101L, 1, 1))
+                .willReturn("character-images/20/101/reference-v1/attempt-1.png");
+        given(characterImageService.uploadGeneratedImage(
+                any(byte[].class),
+                eq("character-images/20/101/reference-v1/attempt-1.png")
+        )).willReturn("https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png");
+
+        service.retryResultApplication(630L);
+
+        assertThat(job.getStatus()).isEqualTo(ProcessingJobStatus.READY);
+        assertThat(targetAsset.getStatus()).isEqualTo(CharacterImageAssetStatus.PUBLISHED);
+        verify(batchClient, never()).submit(any(), any(), any(), any());
+        verify(batchClient).streamResults(eq("file-output"), any());
+        verify(characterRepository).updateProfileImageAndStatus(
+                101L,
+                "https://cdn.readwith.store/character-images/20/101/reference-v1/attempt-1.png",
+                ImageGenerationStatus.COMPLETED
         );
     }
 
