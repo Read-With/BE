@@ -67,6 +67,8 @@ public enum ErrorStatus implements BaseErrorCode {
     IMAGE_FANOUT_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4029", "캐릭터 이미지 fan-out job을 찾을 수 없습니다."),
     IMAGE_FANOUT_RETRY_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "ADMIN4030", "결과 게시를 재시도할 수 없는 캐릭터 이미지 fan-out job 상태입니다."),
     IMAGE_FANOUT_RESULT_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "ADMIN4031", "재적용할 OpenAI Batch 결과 파일이 없습니다."),
+    IMAGE_REFERENCE_JOB_ACTIVE(HttpStatus.CONFLICT, "ADMIN4032", "해당 책의 대표 후보사진 생성 job이 이미 진행 중입니다."),
+    IMAGE_REFERENCE_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN4033", "대표 후보사진 생성 job을 찾을 수 없습니다."),
     IMAGE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ADMIN5020", "캐릭터 이미지 생성에 실패했습니다."),
 
     // Bookmark

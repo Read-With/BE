@@ -53,5 +53,15 @@ public class CharacterImageProperties {
      * OpenAI Batch 상태를 다시 확인하는 간격입니다.
      */
     private long batchPollIntervalMs = 30000;
+
+    /**
+     * 관리자 기준 이미지 후보 생성 개수입니다.
+     */
+    private int referenceCandidateCount = 2;
+
+    /**
+     * 기준 이미지 후보 한 슬롯의 최대 처리 시간입니다.
+     */
+    private long referenceCandidateTimeoutMs = 420000;
 }
 

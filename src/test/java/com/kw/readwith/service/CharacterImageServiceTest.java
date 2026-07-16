@@ -255,6 +255,16 @@ class CharacterImageServiceTest {
     }
 
     @Test
+    @DisplayName("reference candidates use the processing job artifact path")
+    void buildReferenceCandidateJobS3KeyName_usesJobPath() {
+        assertThat(characterImageService.buildReferenceCandidateJobS3KeyName(
+                testCharacter,
+                "reference-candidates-run-1",
+                2
+        )).isEqualTo("character-images/1/reference-jobs/reference-candidates-run-1/slot-2.png");
+    }
+
+    @Test
     @DisplayName("replaced character image is deleted from S3")
     void deleteReplacedGeneratedImage_deletesPreviousObject() {
         String previousUrl = "https://cdn.readwith.store/character-images/1/10.png";
@@ -282,6 +292,18 @@ class CharacterImageServiceTest {
         characterImageService.deleteReplacedGeneratedImage(previousUrl, replacementUrl);
 
         verify(s3Manager, never()).deleteKeys(any());
+    }
+
+    @Test
+    @DisplayName("unused generated character image is deleted from S3")
+    void deleteGeneratedImage_deletesManagedObject() {
+        String imageUrl = "https://cdn.readwith.store/character-images/1/reference-jobs/run-1/slot-1.png";
+        when(cdnUrlService.toPublicObjectKey(imageUrl))
+                .thenReturn(Optional.of("character-images/1/reference-jobs/run-1/slot-1.png"));
+
+        characterImageService.deleteGeneratedImage(imageUrl);
+
+        verify(s3Manager).deleteKeys(List.of("character-images/1/reference-jobs/run-1/slot-1.png"));
     }
 
     @Test
