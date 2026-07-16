@@ -44,11 +44,11 @@ class AdminSwaggerDocumentationTest {
 
         Operation operation = method.getAnnotation(Operation.class);
         assertThat(operation.description())
-                .contains("referenceCandidates[].id", "asset DB ID", "slotNo(1~4)");
+                .contains("referenceCandidates[].id", "asset DB ID", "slotNo");
 
         Parameter candidateId = method.getParameters()[1].getAnnotation(Parameter.class);
         assertThat(candidateId.description())
-                .contains("referenceCandidates[].id", "slotNo(1~4)가 아닙니다");
+                .contains("referenceCandidates[].id", "slotNo가 아닙니다");
 
         Schema idSchema = AdminImageGenerationStatusResponseDTO.ReferenceCandidate.class
                 .getDeclaredField("id")
@@ -59,5 +59,29 @@ class AdminSwaggerDocumentationTest {
 
         assertThat(idSchema.description()).contains("candidateId");
         assertThat(slotSchema.description()).contains("candidateId로 사용하지 않습니다");
+    }
+
+    @Test
+    void documentsAsynchronousReferenceCandidateJobContract() throws NoSuchMethodException {
+        Method method = AdminImageGenerationController.class.getDeclaredMethod(
+                "generateReferenceCandidates",
+                Long.class
+        );
+
+        Operation operation = method.getAnnotation(Operation.class);
+        assertThat(operation.summary()).contains("후보사진 2장", "job 등록");
+        assertThat(operation.description())
+                .contains("동시성 2", "referenceCandidateJob.status=READY", "기본 7분");
+
+        Method jobStatus = AdminImageGenerationController.class.getDeclaredMethod(
+                "getReferenceCandidateJob",
+                Long.class
+        );
+        Method jobLogs = AdminImageGenerationController.class.getDeclaredMethod(
+                "getReferenceCandidateJobLogs",
+                Long.class
+        );
+        assertThat(jobStatus.getAnnotation(Operation.class).description()).contains("status=READY", "FAILED");
+        assertThat(jobLogs.getAnnotation(Operation.class).description()).contains("처리시간", "상세 실패 원인");
     }
 }

@@ -216,6 +216,8 @@ character-image:
 
   s3-path: character-images
   batch-poll-interval-ms: ${CHARACTER_IMAGE_BATCH_POLL_INTERVAL_MS:30000}
+  reference-candidate-count: ${CHARACTER_IMAGE_REFERENCE_CANDIDATE_COUNT:2}
+  reference-candidate-timeout-ms: ${CHARACTER_IMAGE_REFERENCE_CANDIDATE_TIMEOUT_MS:420000}
 
   # OpenAI API Rate Limit 방지 설정
   delay-between-requests-ms: 2000 # 각 요청 사이 2초 대기

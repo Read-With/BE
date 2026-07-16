@@ -29,15 +29,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -47,8 +43,6 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AdminImageGenerationService {
 
-    private static final int REFERENCE_CANDIDATE_COUNT = 4;
-
     private final BookRepository bookRepository;
     private final CharacterRepository characterRepository;
     private final CharacterImageAssetRepository assetRepository;
@@ -57,6 +51,7 @@ public class AdminImageGenerationService {
     private final OpenAiImageEditClient imageEditClient;
     private final CharacterImageProperties imageProperties;
     private final CharacterImageFanoutJobService fanoutJobService;
+    private final ReferenceCandidateJobService referenceCandidateJobService;
     private final ProcessingJobRepository processingJobRepository;
     private final RestTemplate restTemplate;
     private final CdnUrlService cdnUrlService;
@@ -72,50 +67,7 @@ public class AdminImageGenerationService {
         ensureNoActiveFanoutJob(bookId);
         Character referenceCharacter = resolveReferenceCharacter(book)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.IMAGE_REFERENCE_CHARACTER_REQUIRED));
-        BookCharacterImageProfile profile = getOrCreateProfile(book);
-        Long previousActiveReferenceId = Optional.ofNullable(profile.getActiveReferenceAsset())
-                .map(CharacterImageAsset::getId)
-                .orElse(null);
-        profile.markReferenceCandidatesGenerating(
-                referenceCharacter,
-                resolveTextImageModel(),
-                sha256(normalize(imageProperties.getBaseStylePrompt())),
-                sha256(normalize(book.getBookPrompt()))
-        );
-
-        int successCount = 0;
-        for (int slotNo = 1; slotNo <= REFERENCE_CANDIDATE_COUNT; slotNo++) {
-            CharacterImageAsset asset = getOrCreateReferenceCandidate(book, referenceCharacter, slotNo);
-            try {
-                String previousS3Url = asset.getS3Url();
-                GeneratedCharacterImage generated = characterImageService.generateTextImage(referenceCharacter);
-                String s3Url = characterImageService.uploadGeneratedImage(
-                        referenceCharacter,
-                        generated.imageData(),
-                        characterImageService.buildReferenceCandidateSlotS3KeyName(
-                                referenceCharacter,
-                                slotNo,
-                                asset.getAttemptNo()
-                        )
-                );
-                asset.generated(s3Url, generated.model(), generated.promptHash(), generated.requestId());
-                asset.markQaPassed("{\"passed\":true,\"mode\":\"ADMIN_REFERENCE_CANDIDATE\"}");
-                if (!Objects.equals(asset.getId(), previousActiveReferenceId)) {
-                    characterImageService.deleteReplacedGeneratedImage(previousS3Url, s3Url);
-                }
-                successCount++;
-            } catch (Exception e) {
-                log.error("Reference candidate generation failed. bookId={}, slotNo={}", bookId, slotNo, e);
-                asset.fail("REFERENCE_GENERATION_FAILED");
-            }
-        }
-
-        if (successCount > 0) {
-            profile.markReferenceCandidatesReady(referenceCharacter);
-        } else {
-            profile.markQaFailed(referenceCharacter);
-        }
-
+        referenceCandidateJobService.queue(book, referenceCharacter);
         return buildStatusResponse(book);
     }
 
@@ -123,6 +75,7 @@ public class AdminImageGenerationService {
     public AdminImageGenerationStatusResponseDTO selectReferenceCandidate(Long bookId, Long candidateId) {
         Book book = getBook(bookId);
         ensureNoActiveFanoutJob(bookId);
+        referenceCandidateJobService.ensureNoActiveJob(bookId);
         CharacterImageAsset candidate = assetRepository.findByIdAndBook(candidateId, book)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.IMAGE_ASSET_NOT_BELONG_TO_BOOK));
         ensureReferenceCandidate(candidate);
@@ -147,6 +100,7 @@ public class AdminImageGenerationService {
     public AdminImageGenerationStatusResponseDTO regenerateCharacterImage(Long bookId, Long characterId) {
         Book book = getBook(bookId);
         ensureNoActiveFanoutJob(bookId);
+        referenceCandidateJobService.ensureNoActiveJob(bookId);
         Character character = getCharacter(characterId);
         if (!character.getBook().getId().equals(book.getId())) {
             throw new GeneralException(ErrorStatus.BOOK_CHARACTER_NOT_FOUND);
@@ -158,7 +112,7 @@ public class AdminImageGenerationService {
                 && profile.getReferenceCharacter().getId().equals(character.getId())) {
             throw new GeneralException(
                     ErrorStatus.IMAGE_ASSET_INVALID_STATUS,
-                    "대표 캐릭터 이미지는 후보사진 4장을 재생성한 뒤 다시 선택해야 합니다."
+                    "대표 캐릭터 이미지는 후보사진을 재생성한 뒤 다시 선택해야 합니다."
             );
         }
 
@@ -206,13 +160,20 @@ public class AdminImageGenerationService {
 
     private AdminImageGenerationStatusResponseDTO buildStatusResponse(Book book) {
         Optional<BookCharacterImageProfile> profile = profileRepository.findByBook(book);
+        Long selectedReferenceCandidateId = profile
+                .map(BookCharacterImageProfile::getActiveReferenceAsset)
+                .map(CharacterImageAsset::getId)
+                .orElse(null);
+        int candidateCount = referenceCandidateCount();
         List<Character> characters = characterRepository.findByBookOrderByIsMainCharacterDescNameAsc(book);
         List<CharacterImageAsset> referenceCandidates = assetRepository
                 .findByBookAndAssetRoleOrderBySlotNoAscCreatedAtAsc(book, CharacterImageAssetRole.REFERENCE_CANDIDATE)
                 .stream()
                 .filter(asset -> asset.getSlotNo() != null
                         && asset.getSlotNo() >= 1
-                        && asset.getSlotNo() <= REFERENCE_CANDIDATE_COUNT)
+                        && (asset.getSlotNo() <= candidateCount
+                        || (selectedReferenceCandidateId != null
+                        && selectedReferenceCandidateId.equals(asset.getId()))))
                 .sorted(Comparator.comparing(
                         CharacterImageAsset::getSlotNo,
                         Comparator.nullsLast(Integer::compareTo)
@@ -229,10 +190,6 @@ public class AdminImageGenerationService {
                         LinkedHashMap::new
                 ));
 
-        Long selectedReferenceCandidateId = profile
-                .map(BookCharacterImageProfile::getActiveReferenceAsset)
-                .map(CharacterImageAsset::getId)
-                .orElse(null);
         Character referenceCharacter = profile
                 .map(BookCharacterImageProfile::getReferenceCharacter)
                 .or(() -> resolveReferenceCharacter(book))
@@ -247,11 +204,19 @@ public class AdminImageGenerationService {
                 )
                 .map(ProcessingJobResponseDTO::from)
                 .orElse(null);
+        ProcessingJobResponseDTO referenceCandidateJob = processingJobRepository
+                .findTopByBookIdAndPipelineTypeOrderByCreatedAtDesc(
+                        book.getId(),
+                        ProcessingPipelineType.IMAGE_REFERENCE_GENERATION
+                )
+                .map(ProcessingJobResponseDTO::from)
+                .orElse(null);
 
         return AdminImageGenerationStatusResponseDTO.builder()
                 .bookId(book.getId())
                 .status(status)
                 .nextAction(resolveNextAction(status))
+                .referenceCandidateJob(referenceCandidateJob)
                 .fanoutJob(fanoutJob)
                 .referenceCharacter(AdminImageGenerationStatusResponseDTO.CharacterSummary.from(referenceCharacter))
                 .selectedReferenceCandidateId(selectedReferenceCandidateId)
@@ -309,31 +274,6 @@ public class AdminImageGenerationService {
             case "FANOUT_GENERATING" -> "WAIT_FANOUT";
             default -> "REVIEW_OR_REGENERATE_CHARACTER_IMAGES";
         };
-    }
-
-    private CharacterImageAsset getOrCreateReferenceCandidate(Book book,
-                                                              Character referenceCharacter,
-                                                              int slotNo) {
-        Optional<CharacterImageAsset> existing = assetRepository.findByBookAndAssetRoleAndSlotNo(
-                book,
-                CharacterImageAssetRole.REFERENCE_CANDIDATE,
-                slotNo
-        );
-        if (existing.isPresent()) {
-            CharacterImageAsset asset = existing.get();
-            asset.beginReferenceCandidate(referenceCharacter, slotNo);
-            return asset;
-        }
-
-        return assetRepository.save(CharacterImageAsset.builder()
-                .book(book)
-                .character(referenceCharacter)
-                .assetRole(CharacterImageAssetRole.REFERENCE_CANDIDATE)
-                .generationMode(CharacterImageGenerationMode.TEXT_TO_IMAGE)
-                .slotNo(slotNo)
-                .status(CharacterImageAssetStatus.GENERATING)
-                .attemptNo(1)
-                .build());
     }
 
     private CharacterImageAsset getOrCreateCharacterImageAsset(Character character,
@@ -435,33 +375,7 @@ public class AdminImageGenerationService {
                 || status == CharacterImageAssetStatus.PUBLISHED;
     }
 
-    private String resolveTextImageModel() {
-        String configured = normalize(imageProperties.getModel());
-        return configured != null ? configured : "gpt-image-2";
-    }
-
-    private String normalize(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
-    }
-
-    private String sha256(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder();
-            for (byte b : hash) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not available.", e);
-        }
+    private int referenceCandidateCount() {
+        return Math.min(Math.max(imageProperties.getReferenceCandidateCount(), 1), 4);
     }
 }

@@ -244,6 +244,14 @@ public class CharacterImageService {
                 slotNo);
     }
 
+    public String buildReferenceCandidateJobS3KeyName(Character character, String runId, int slotNo) {
+        return String.format("%s/%d/reference-jobs/%s/slot-%d.png",
+                imageProperties.getS3Path(),
+                character.getBook().getId(),
+                runId,
+                slotNo);
+    }
+
     public String buildCandidateS3KeyName(Character character, Long assetId) {
         return String.format("%s/%d/%d/candidates/%d-%s.png",
                 imageProperties.getS3Path(),
@@ -456,6 +464,18 @@ public class CharacterImageService {
             return;
         }
         cleanup.run();
+    }
+
+    public void deleteGeneratedImage(String imageUrl) {
+        Optional<String> objectKey = cdnUrlService.toPublicObjectKey(imageUrl);
+        if (objectKey.isEmpty() || !isManagedCharacterImageKey(objectKey.get())) {
+            return;
+        }
+        try {
+            s3Manager.deleteKeys(List.of(objectKey.get()));
+        } catch (RuntimeException e) {
+            log.warn("Failed to delete unused character image from S3. key={}", objectKey.get(), e);
+        }
     }
 
     private boolean isManagedCharacterImageKey(String key) {

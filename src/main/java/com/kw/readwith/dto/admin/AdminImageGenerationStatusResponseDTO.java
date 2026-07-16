@@ -14,7 +14,7 @@ import java.util.List;
 @Schema(
         description = """
                 관리자 책 단위 이미지 생성 콘솔 상태 응답입니다.
-                대표 캐릭터 후보사진 4장과 캐릭터별 현재 이미지 상태를 한 번에 내려줍니다.
+                대표 캐릭터 후보사진과 캐릭터별 현재 이미지 상태를 한 번에 내려줍니다.
                 관리자 페이지는 이 응답의 status와 nextAction만 보고 다음 버튼을 결정할 수 있습니다.
                 """
 )
@@ -27,7 +27,7 @@ public class AdminImageGenerationStatusResponseDTO {
             description = """
                     책 단위 이미지 생성 상태입니다.
                     EMPTY: 아직 후보사진이 없습니다. REFERENCE_GENERATING: 대표 후보사진 생성 중입니다.
-                    REFERENCE_READY: 후보사진 4장 중 선택 대기 상태입니다. FANOUT_GENERATING: 선택된 대표 후보로 나머지 캐릭터 생성 중입니다.
+                    REFERENCE_READY: 생성된 후보사진 중 선택 대기 상태입니다. FANOUT_GENERATING: 선택된 대표 후보로 나머지 캐릭터 생성 중입니다.
                     READY: 관리자 검토 가능한 상태입니다. FAILED: 후보 또는 캐릭터 이미지 중 실패 항목이 있습니다.
                     """,
             allowableValues = {"EMPTY", "REFERENCE_GENERATING", "REFERENCE_READY", "FANOUT_GENERATING", "READY", "FAILED"},
@@ -45,16 +45,19 @@ public class AdminImageGenerationStatusResponseDTO {
     )
     private String nextAction;
 
+    @Schema(description = "가장 최근 대표 후보사진 생성 job입니다. status=READY 또는 FAILED가 되면 처리가 끝난 상태입니다.", nullable = true)
+    private ProcessingJobResponseDTO referenceCandidateJob;
+
     @Schema(description = "가장 최근 캐릭터 이미지 fan-out job입니다. 대표 후보 선택 전에는 null입니다.", nullable = true)
     private ProcessingJobResponseDTO fanoutJob;
 
-    @Schema(description = "서버가 자동 지정한 대표 캐릭터입니다. 후보사진 4장은 이 캐릭터 기준으로 생성됩니다.", nullable = true)
+    @Schema(description = "서버가 자동 지정한 대표 캐릭터입니다. 후보사진은 이 캐릭터 기준으로 생성됩니다.", nullable = true)
     private CharacterSummary referenceCharacter;
 
     @Schema(description = "관리자가 선택한 대표 후보사진 asset ID입니다. 선택 전에는 null입니다.", nullable = true, example = "102")
     private Long selectedReferenceCandidateId;
 
-    @Schema(description = "책에 저장된 대표 캐릭터 후보사진 목록입니다. slotNo 1~4만 유지되며 재생성 시 같은 slot을 덮어씁니다.")
+    @Schema(description = "책에 저장된 대표 캐릭터 후보사진 목록입니다. 기본 slotNo는 1~2이며 재생성 시 같은 slot을 덮어씁니다.")
     private List<ReferenceCandidate> referenceCandidates;
 
     @Schema(description = "책에 등록된 캐릭터별 현재 이미지 생성 상태 목록입니다.")
@@ -96,7 +99,7 @@ public class AdminImageGenerationStatusResponseDTO {
         @Schema(description = "후보사진 asset DB ID입니다. 후보 선택 API의 candidateId로 이 값을 전달합니다.", example = "101")
         private Long id;
 
-        @Schema(description = "화면 표시용 후보 슬롯 번호입니다. 책마다 1~4만 유지되며 candidateId로 사용하지 않습니다.", example = "1")
+        @Schema(description = "화면 표시용 후보 슬롯 번호입니다. 기본값은 1~2이며 candidateId로 사용하지 않습니다.", example = "1")
         private Integer slotNo;
 
         @Schema(

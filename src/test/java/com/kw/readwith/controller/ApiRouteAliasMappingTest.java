@@ -49,6 +49,8 @@ class ApiRouteAliasMappingTest {
         assertThat(paths).contains("/api/v2/favorites/{bookId}");
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}");
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}/reference-candidates");
+        assertThat(paths).contains("/api/v2/admin/image-generation/reference-candidate-jobs/{jobId}");
+        assertThat(paths).contains("/api/v2/admin/image-generation/reference-candidate-jobs/{jobId}/logs");
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}/reference-candidates/{candidateId}/select");
         assertThat(paths).contains("/api/v2/admin/image-generation/books/{bookId}/characters/{characterId}/regenerate");
         assertThat(paths).contains("/api/v2/admin/books/{bookId}");
