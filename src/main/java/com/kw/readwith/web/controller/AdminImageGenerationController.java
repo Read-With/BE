@@ -197,6 +197,38 @@ public class AdminImageGenerationController {
     }
 
     @Operation(
+            summary = "실패한 fan-out job의 Batch 결과 게시 재시도",
+            description = """
+                    OpenAI Batch는 완료됐지만 S3 또는 DB 게시 단계에서 실패한 job의 기존 output/error 파일을 다시 적용합니다.
+                    새로운 OpenAI Batch나 이미지 생성 요청을 제출하지 않으므로 이미지 생성 비용이 다시 발생하지 않습니다.
+                    status=FAILED이고 outputFileId 또는 errorFileId가 저장된 job만 재시도할 수 있습니다.
+                    응답의 status=READY여야 모든 대상 이미지 게시가 완료된 상태입니다.
+                    """
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "기존 Batch 결과 게시 재시도 완료",
+                    content = @Content(schema = @Schema(implementation = ProcessingJobResponseDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "ADMIN4030: 재시도할 수 없는 job 상태입니다. ADMIN4031: 저장된 Batch 결과 파일이 없습니다."
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "ADMIN4029: 캐릭터 이미지 fan-out job을 찾을 수 없습니다."
+            )
+    })
+    @PostMapping("/fanout-jobs/{jobId}/retry-publish")
+    public ApiResponse<ProcessingJobResponseDTO> retryFanoutResultPublish(
+            @Parameter(description = "결과 게시를 다시 시도할 실패한 fan-out job ID", required = true, example = "123")
+            @PathVariable Long jobId) {
+        fanoutJobService.retryResultApplication(jobId);
+        return ApiResponse.onSuccess(fanoutJobService.getFanoutJob(jobId));
+    }
+
+    @Operation(
             summary = "개별 캐릭터 이미지 재생성",
             description = """
                     fan-out 이후 특정 캐릭터 이미지가 마음에 들지 않을 때 그 캐릭터 1명만 다시 생성합니다.

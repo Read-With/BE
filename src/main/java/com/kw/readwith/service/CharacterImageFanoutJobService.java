@@ -165,6 +165,7 @@ public class CharacterImageFanoutJobService {
                         EnumSet.of(ProcessingJobStatus.PROCESSING)
                 ).stream()
                 .filter(job -> job.getExternalJobId() != null && !job.getExternalJobId().isBlank())
+                .filter(job -> !isApplyingResults(job.getCurrentStep()))
                 .map(ProcessingJob::getId)
                 .toList();
     }
@@ -242,6 +243,51 @@ public class CharacterImageFanoutJobService {
             log.error("Character image fan-out Batch refresh failed. jobId={}", jobId, e);
             writeRefreshWarning(jobId, e);
         }
+    }
+
+    public void retryResultApplication(Long jobId) {
+        ResultFileContext context = prepareResultApplicationRetry(jobId);
+        try {
+            batchClient.streamResults(context.outputFileId(), result -> processResultSafely(jobId, result));
+            batchClient.streamResults(context.errorFileId(), result -> processResultSafely(jobId, result));
+            finalizeResults(jobId, "completed");
+        } catch (Exception e) {
+            completeFailure(jobId, "IMAGE_BATCH_RESULT_APPLY_FAILED", messageOf(e));
+        }
+    }
+
+    private ResultFileContext prepareResultApplicationRetry(Long jobId) {
+        return writableTransaction().execute(status -> {
+            ProcessingJob job = findImageJobForUpdate(jobId);
+            if (job.getStatus() != ProcessingJobStatus.FAILED) {
+                throw new GeneralException(ErrorStatus.IMAGE_FANOUT_RETRY_NOT_ALLOWED);
+            }
+            if (isBlank(job.getOutputFileId()) && isBlank(job.getErrorFileId())) {
+                throw new GeneralException(ErrorStatus.IMAGE_FANOUT_RESULT_NOT_AVAILABLE);
+            }
+
+            List<CharacterImageAsset> assets = assetRepository.findByProcessingJobOrderByIdAsc(job);
+            if (assets.isEmpty()) {
+                throw new GeneralException(ErrorStatus.IMAGE_FANOUT_RESULT_NOT_AVAILABLE);
+            }
+            for (CharacterImageAsset asset : assets) {
+                if (asset.getStatus() != CharacterImageAssetStatus.PUBLISHED) {
+                    asset.retryResultApplication();
+                    characterRepository.updateImageGenerationStatus(
+                            asset.getCharacter().getId(),
+                            ImageGenerationStatus.GENERATING
+                    );
+                }
+            }
+
+            job.markProcessing("reapplying_batch_results");
+            writeLog(job, ProcessingJobLogLevel.INFO, "reapplying_batch_results",
+                    "Reapplying stored OpenAI Batch image results without submitting a new Batch.", Map.of(
+                            "outputFileId", Optional.ofNullable(job.getOutputFileId()).orElse(""),
+                            "errorFileId", Optional.ofNullable(job.getErrorFileId()).orElse("")
+                    ));
+            return new ResultFileContext(job.getOutputFileId(), job.getErrorFileId());
+        });
     }
 
     private SubmissionContext transitionToSubmitting(Long jobId) {
@@ -414,10 +460,10 @@ public class CharacterImageFanoutJobService {
                 return;
             }
             String s3Url = characterImageService.uploadGeneratedImage(
-                    target.character(),
                     result.imageData(),
                     characterImageService.buildPublishedS3KeyName(
-                            target.character(),
+                            target.bookId(),
+                            target.characterId(),
                             target.referenceVersion(),
                             target.attemptNo()
                     )
@@ -449,7 +495,8 @@ public class CharacterImageFanoutJobService {
                 return null;
             }
             return new TargetUploadContext(
-                    asset.getCharacter(),
+                    asset.getBook().getId(),
+                    asset.getCharacter().getId(),
                     asset.getReferenceVersion(),
                     asset.getAttemptNo()
             );
@@ -714,6 +761,15 @@ public class CharacterImageFanoutJobService {
         return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
+    private boolean isApplyingResults(String currentStep) {
+        return "applying_batch_results".equals(currentStep)
+                || "reapplying_batch_results".equals(currentStep);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     private void writeLog(ProcessingJob job,
                           ProcessingJobLogLevel level,
                           String step,
@@ -764,6 +820,14 @@ public class CharacterImageFanoutJobService {
     private record PollContext(String externalJobId) {
     }
 
-    private record TargetUploadContext(Character character, int referenceVersion, int attemptNo) {
+    private record TargetUploadContext(
+            Long bookId,
+            Long characterId,
+            int referenceVersion,
+            int attemptNo
+    ) {
+    }
+
+    private record ResultFileContext(String outputFileId, String errorFileId) {
     }
 }
