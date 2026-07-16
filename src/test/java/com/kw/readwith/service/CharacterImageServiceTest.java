@@ -58,6 +58,9 @@ class CharacterImageServiceTest {
     @Mock
     private CharacterImageTransactionService transactionService;
 
+    @Mock
+    private CdnUrlService cdnUrlService;
+
     @InjectMocks
     private CharacterImageService characterImageService;
 
@@ -85,7 +88,7 @@ class CharacterImageServiceTest {
                 .build();
 
         when(imageProperties.getFallbackUrl()).thenReturn("https://cdn.readwith.store/character/default.png");
-        when(imageProperties.getModel()).thenReturn("gpt-image-1");
+        when(imageProperties.getModel()).thenReturn("gpt-image-2");
         when(imageProperties.getQuality()).thenReturn("medium");
         when(imageProperties.getWidth()).thenReturn(1024);
         when(imageProperties.getHeight()).thenReturn(1024);
@@ -155,14 +158,26 @@ class CharacterImageServiceTest {
     }
 
     @Test
+    @DisplayName("reference edit prompt locks the book-wide visual style while preserving target identity")
+    void buildReferenceEditPrompt_appliesSeriesLock() {
+        String prompt = characterImageService.buildReferenceEditPrompt(testCharacter);
+
+        assertThat(prompt)
+                .contains("immutable visual bible for this book series")
+                .contains("Keep these style attributes consistent across every character portrait")
+                .contains("Do not copy the reference person's face")
+                .contains("middle-aged man, pale complexion");
+    }
+
+    @Test
     @DisplayName("generateAndSaveImage uploads generated image using current bookPrompt")
     void generateAndSaveImage_succeeds() throws Exception {
         Path tempImage = Files.createTempFile("character-image-test-", ".png");
         Files.write(tempImage, new byte[]{1, 2, 3, 4});
 
         when(characterRepository.findByIdWithBook(testCharacter.getId())).thenReturn(Optional.of(testCharacter));
-        when(s3Manager.getObjectUrl("character-images/1/10.png"))
-                .thenReturn("https://cdn.readwith.store/character-images/1/10.png");
+        when(s3Manager.getObjectUrl(anyString()))
+                .thenAnswer(invocation -> "https://cdn.readwith.store/" + invocation.getArgument(0));
 
         ImageResponse imageResponse = mock(ImageResponse.class);
         ImageGeneration generation = mock(ImageGeneration.class);
@@ -178,27 +193,31 @@ class CharacterImageServiceTest {
         ArgumentCaptor<ImagePrompt> imagePromptCaptor = ArgumentCaptor.forClass(ImagePrompt.class);
         verify(imageModel).call(imagePromptCaptor.capture());
         OpenAiImageOptions imageOptions = (OpenAiImageOptions) imagePromptCaptor.getValue().getOptions();
-        assertThat(imageOptions.getModel()).isEqualTo("gpt-image-1");
+        assertThat(imageOptions.getModel()).isEqualTo("gpt-image-2");
         assertThat(imageOptions.getQuality()).isEqualTo("medium");
         assertThat(imageOptions.getWidth()).isEqualTo(1024);
         assertThat(imageOptions.getHeight()).isEqualTo(1024);
         assertThat(imageOptions.getN()).isEqualTo(1);
-        verify(s3Manager).uploadBytes(eq("character-images/1/10.png"), any(byte[].class), eq("image/png"));
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(s3Manager).uploadBytes(keyCaptor.capture(), any(byte[].class), eq("image/png"));
+        assertThat(keyCaptor.getValue())
+                .startsWith("character-images/1/10/standalone/")
+                .endsWith(".png");
         verify(transactionService).updateImageAndStatus(
                 testCharacter.getId(),
-                "https://cdn.readwith.store/character-images/1/10.png",
+                "https://cdn.readwith.store/" + keyCaptor.getValue(),
                 ImageGenerationStatus.COMPLETED
         );
     }
 
     @Test
-    @DisplayName("generateAndSaveImage uploads gpt-image-1 base64 response")
+    @DisplayName("generateAndSaveImage uploads gpt-image-2 base64 response")
     void generateAndSaveImage_uploadsBase64JsonResponse() {
         byte[] generatedImage = new byte[]{9, 8, 7, 6};
 
         when(characterRepository.findByIdWithBook(testCharacter.getId())).thenReturn(Optional.of(testCharacter));
-        when(s3Manager.getObjectUrl("character-images/1/10.png"))
-                .thenReturn("https://cdn.readwith.store/character-images/1/10.png");
+        when(s3Manager.getObjectUrl(anyString()))
+                .thenAnswer(invocation -> "https://cdn.readwith.store/" + invocation.getArgument(0));
 
         ImageResponse imageResponse = mock(ImageResponse.class);
         ImageGeneration generation = mock(ImageGeneration.class);
@@ -211,17 +230,58 @@ class CharacterImageServiceTest {
         characterImageService.generateAndSaveImage(testCharacter.getId());
 
         ArgumentCaptor<byte[]> imageCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(s3Manager).uploadBytes(
-                eq("character-images/1/10.png"),
+                keyCaptor.capture(),
                 imageCaptor.capture(),
                 eq("image/png")
         );
         assertThat(imageCaptor.getValue()).containsExactly(generatedImage);
+        assertThat(keyCaptor.getValue())
+                .startsWith("character-images/1/10/standalone/")
+                .endsWith(".png");
         verify(transactionService).updateImageAndStatus(
                 testCharacter.getId(),
-                "https://cdn.readwith.store/character-images/1/10.png",
+                "https://cdn.readwith.store/" + keyCaptor.getValue(),
                 ImageGenerationStatus.COMPLETED
         );
+    }
+
+    @Test
+    @DisplayName("reference-based published images use the reference and attempt versions")
+    void buildPublishedS3KeyName_usesImmutableVersionedPath() {
+        assertThat(characterImageService.buildPublishedS3KeyName(testCharacter, 2, 3))
+                .isEqualTo("character-images/1/10/reference-v2/attempt-3.png");
+    }
+
+    @Test
+    @DisplayName("replaced character image is deleted from S3")
+    void deleteReplacedGeneratedImage_deletesPreviousObject() {
+        String previousUrl = "https://cdn.readwith.store/character-images/1/10.png";
+        String replacementUrl = "https://cdn.readwith.store/character-images/1/10/reference-v2/attempt-3.png";
+        when(cdnUrlService.toPublicObjectKey(previousUrl))
+                .thenReturn(Optional.of("character-images/1/10.png"));
+        when(cdnUrlService.toPublicObjectKey(replacementUrl))
+                .thenReturn(Optional.of("character-images/1/10/reference-v2/attempt-3.png"));
+
+        characterImageService.deleteReplacedGeneratedImage(previousUrl, replacementUrl);
+
+        verify(s3Manager).deleteKeys(List.of("character-images/1/10.png"));
+    }
+
+    @Test
+    @DisplayName("shared public assets are not deleted when a character image is replaced")
+    void deleteReplacedGeneratedImage_keepsSharedPublicObject() {
+        String previousUrl = "https://cdn.readwith.store/public/default-character.png";
+        String replacementUrl = "https://cdn.readwith.store/character-images/1/10/reference-v2/attempt-3.png";
+        when(cdnUrlService.toPublicObjectKey(previousUrl))
+                .thenReturn(Optional.of("public/default-character.png"));
+        when(cdnUrlService.toPublicObjectKey(replacementUrl))
+                .thenReturn(Optional.of("character-images/1/10/reference-v2/attempt-3.png"));
+
+        characterImageService.deleteReplacedGeneratedImage(previousUrl, replacementUrl);
+
+        verify(s3Manager, never()).deleteKeys(any());
     }
 
     @Test

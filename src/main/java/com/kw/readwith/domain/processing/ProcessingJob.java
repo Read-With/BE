@@ -56,6 +56,18 @@ public class ProcessingJob extends BaseEntity {
     @Column(name = "artifact_path", length = 255)
     private String artifactPath;   // 결과물이 저장된 루트 경로
 
+    @Column(name = "external_job_id", length = 120)
+    private String externalJobId;
+
+    @Column(name = "input_file_id", length = 120)
+    private String inputFileId;
+
+    @Column(name = "output_file_id", length = 120)
+    private String outputFileId;
+
+    @Column(name = "error_file_id", length = 120)
+    private String errorFileId;
+
     @Column(name = "rule_version", length = 50)
     private String ruleVersion;   // 이 job이 사용한 정규화 규칙 버전
 
@@ -113,5 +125,32 @@ public class ProcessingJob extends BaseEntity {
     public void assignNormalizationVersion(String ruleVersion, String locatorVersion) {
         this.ruleVersion = ruleVersion;
         this.locatorVersion = locatorVersion;
+    }
+
+    public void markExternalJobSubmitted(String externalJobId, String inputFileId, String externalStatus) {
+        this.externalJobId = externalJobId;
+        this.inputFileId = inputFileId;
+        this.status = ProcessingJobStatus.PROCESSING;
+        this.currentStep = "openai_" + externalStatus;
+        if (this.startedAt == null) {
+            this.startedAt = LocalDateTime.now();
+        }
+        this.finishedAt = null;
+        this.failureCode = null;
+        this.failureMessage = null;
+    }
+
+    public void updateExternalJobStatus(String externalStatus, String outputFileId, String errorFileId) {
+        this.currentStep = "openai_" + externalStatus;
+        this.outputFileId = outputFileId;
+        this.errorFileId = errorFileId;
+    }
+
+    public void advanceProcessing(String currentStep) {
+        this.status = ProcessingJobStatus.PROCESSING;
+        this.currentStep = currentStep;
+        if (this.startedAt == null) {
+            this.startedAt = LocalDateTime.now();
+        }
     }
 }

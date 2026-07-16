@@ -45,6 +45,9 @@ public class AdminImageGenerationStatusResponseDTO {
     )
     private String nextAction;
 
+    @Schema(description = "가장 최근 캐릭터 이미지 fan-out job입니다. 대표 후보 선택 전에는 null입니다.", nullable = true)
+    private ProcessingJobResponseDTO fanoutJob;
+
     @Schema(description = "서버가 자동 지정한 대표 캐릭터입니다. 후보사진 4장은 이 캐릭터 기준으로 생성됩니다.", nullable = true)
     private CharacterSummary referenceCharacter;
 

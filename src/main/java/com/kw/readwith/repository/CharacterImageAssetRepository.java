@@ -5,6 +5,7 @@ import com.kw.readwith.domain.Character;
 import com.kw.readwith.domain.CharacterImageAsset;
 import com.kw.readwith.domain.enums.CharacterImageAssetRole;
 import com.kw.readwith.domain.enums.CharacterImageAssetStatus;
+import com.kw.readwith.domain.processing.ProcessingJob;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -53,6 +54,8 @@ public interface CharacterImageAssetRepository extends JpaRepository<CharacterIm
     );
 
     List<CharacterImageAsset> findByBookAndStatusIn(Book book, Collection<CharacterImageAssetStatus> statuses);
+
+    List<CharacterImageAsset> findByProcessingJobOrderByIdAsc(ProcessingJob processingJob);
 
     @Query("SELECT COALESCE(MAX(a.attemptNo), 0) FROM CharacterImageAsset a " +
             "WHERE a.character = :character AND a.assetRole = :assetRole")
