@@ -2,45 +2,21 @@
 
 ## 0. 프로젝트 설명
 
-Readwith는 **사용자가 읽은 위치까지만 등장인물 관계 변화를 시각화하는 독서 지원 서비스**입니다. 고전문학이나 장편소설에서 복잡한 인물 관계를 이해하려고 앞부분을 반복해서 확인해야 하는 문제와, 작품 전체를 한 번에 분석하는 기존 도구가 스포일러를 노출하는 문제에서 시작했습니다.
+Readwith는 **등장인물 관계를 시각화해 복잡한 소설을 더 쉽게 읽도록 돕는 서비스**입니다. 고전문학이나 장편소설을 읽다 보면 인물이 많아질수록 누가 누구와 어떤 관계였는지 놓치기 쉽고, 앞부분을 다시 찾아보는 일도 잦아집니다.
 
-백엔드에서는 EPUB마다 다른 문서 구조를 reader와 AI가 함께 사용할 수 있는 **canonical 콘텐츠와 Locator**로 변환하고, AI가 추출한 관계 변화를 **Delta 이벤트**로 저장해 독서 진행 위치에 맞는 그래프를 복원합니다. 정규화, 관계 데이터 적재와 이미지 생성은 비동기 processing job으로 관리해 실패 추적과 재처리가 가능한 파이프라인으로 구성했습니다.
+기존의 작품 분석 서비스는 책 전체 내용을 한꺼번에 보여줘 아직 읽지 않은 내용까지 노출하는 경우가 많았습니다. Readwith는 사용자가 읽은 위치까지만 관계 변화를 보여주고, 인물별 시점 요약과 그래프를 함께 제공해 스포일러 없이 작품의 흐름을 따라갈 수 있도록 만들었습니다.
 
-| 구분 | 내용 |
-| --- | --- |
-| 팀 구성 | 4명 |
-| 역할 | 아이디어 제안, PM, 백엔드·인프라 |
-| 주요 영역 | EPUB 정규화, Locator, 관계 Delta, 비동기 processing job |
-| 성과 | 졸업작품전시회 최우수상 |
+이 기능을 만들려면 AI가 찾아낸 관계 변화가 책의 어느 위치에서 일어났는지 다시 연결해야 했습니다. 하지만 EPUB은 책마다 HTML 구조가 다르고, 분석을 위해 본문을 TXT로 정리하면 원래 위치 정보도 사라집니다. Readwith 백엔드는 이 문제를 해결하기 위해 EPUB을 공통된 형태로 정리하고, 원본과 분석 텍스트를 오갈 수 있는 위치 체계를 만들었습니다.
 
-### 핵심 사용자 가치
-
-- 사용자의 현재 독서 진도까지만 관계 변화와 인물 정보를 노출
-- 관계의 강도와 감정 변화를 이벤트 순서에 따라 그래프로 복원
-- 인물 관점 요약과 인터랙티브 그래프로 복잡한 작품의 맥락 이해 지원
+> 4인 팀에서 아이디어 제안과 PM, 백엔드·인프라를 맡았으며 졸업작품전시회 최우수상을 수상했습니다.
 
 ## 1. 아키텍처
 
 <img width="811" height="386" alt="readwith drawio" src="https://github.com/user-attachments/assets/6bf2108b-ced2-46e7-845b-9e51edff4e30" />
 
-핵심 콘텐츠 흐름은 다음과 같습니다.
+책을 업로드하면 목차와 XHTML을 분석해 reader와 AI가 함께 사용할 chapter로 정리합니다. reader용 본문과 AI 분석용 텍스트를 만들 때 같은 위치 정보를 남겨두고, AI가 추출한 관계 변화는 이벤트별로 저장합니다. 사용자가 책을 읽을 때는 현재 위치까지 쌓인 변화만 합쳐 관계 그래프를 만듭니다.
 
-```text
-EPUB 업로드
-  -> TOC·XHTML 구조 분석
-  -> canonical chapter 정규화
-  -> combined.xhtml / meta.json / chapter txt 생성
-  -> AI 관계 분석
-  -> relationship delta 적재
-  -> 사용자 Locator까지 누적한 관계 그래프 응답
-```
-
-장시간 작업은 HTTP 요청에서 직접 완료를 기다리지 않고 상태와 로그를 가진 job으로 처리합니다.
-
-```text
-202 Accepted -> QUEUED -> RUNNING -> READY / FAILED
-                         \-> 처리 로그·실패 원인·재시도
-```
+정규화나 이미지 생성처럼 오래 걸리는 작업은 요청이 끝날 때까지 기다리게 하지 않습니다. 먼저 작업을 등록한 뒤 상태와 로그를 남기며 처리하고, 실패한 경우 어디에서 멈췄는지 확인해 다시 진행할 수 있도록 했습니다.
 
 ## 2. 사용 기술
 
@@ -49,119 +25,81 @@ EPUB 업로드
 | Backend | Java 17, Spring Boot 4.1.0, Spring Data JPA, Spring Security |
 | Database | MySQL, Flyway, HikariCP |
 | Auth | Google OAuth2, JWT |
-| Content Processing | EPUB Normalization Pipeline, Canonical Locator, Jsoup |
-| AI / Async | Spring AI 2.0.0, OpenAI, GPT Image, Async Executor |
-| Storage / Delivery | AWS S3, CloudFront, Presigned URL |
+| EPUB | Jsoup, EPUB Normalization Pipeline, Locator |
+| AI | Spring AI 2.0.0, OpenAI, GPT Image |
+| Storage | AWS S3, CloudFront, Presigned URL |
 | Runtime | Docker, Render |
-| Docs / Test | Swagger/OpenAPI, JUnit, Gutenberg Regression Test |
+| Test / Docs | JUnit, Gutenberg Regression Test, Swagger/OpenAPI |
 
-## 3. 핵심 문제 해결
+## 3. 주요 문제 해결
 
-### 3-1. EPUB을 분석용 TXT로 변환하면 원본 위치가 사라지는 문제
+### 3-1. EPUB을 TXT로 바꾸자 책 속 위치를 찾을 수 없게 된 문제
 
-AI에는 토큰 사용과 분석 품질을 고려해 EPUB의 HTML 원문이 아닌 정제된 텍스트를 전달합니다. 하지만 정제 과정에서는 DOM 위치와 태그 정보가 사라져, AI가 추출한 관계 변화가 실제 reader의 어느 위치에서 발생했는지 다시 연결할 수 없었습니다.
+AI에 EPUB의 HTML을 그대로 넣으면 불필요한 태그가 많아지고 분석할 텍스트도 커집니다. 그래서 본문만 정리한 TXT를 사용했지만, 이 과정에서 문장이 원래 EPUB의 어디에 있었는지 알 수 없게 됐습니다. AI가 관계 변화를 찾아도 reader 화면의 위치와 연결할 수 없는 상태였습니다.
 
-이를 해결하기 위해 `chapterIndex + blockIndex + offset` 구조의 canonical Locator를 설계했습니다. 정규화 과정에서 문단별 시작 위치와 길이를 `meta.json`에 기록하고, `LocatorResolutionService`가 Locator와 `txtOffset`을 양방향으로 변환합니다. 진행률, 북마크, 이벤트와 관계 그래프가 특정 EPUB의 DOM 구조에 직접 의존하지 않고 같은 위치 언어를 사용하도록 구성했습니다.
+이를 해결하기 위해 `chapterIndex + blockIndex + offset`으로 이루어진 Locator를 만들었습니다. 정규화할 때 각 문단의 시작 위치와 길이를 `meta.json`에 함께 기록하고, `LocatorResolutionService`에서 Locator와 TXT 기준 위치를 서로 바꿀 수 있게 했습니다. 덕분에 진행률, 북마크, 인물 이벤트와 관계 그래프가 모두 같은 위치 기준을 사용할 수 있었습니다. [관련 PR #83](https://github.com/Read-With/BE/pull/83)
 
-- 관련 PR: [#83 EPUB 정규화·좌표 엔진 이식](https://github.com/Read-With/BE/pull/83)
+### 3-2. 책마다 chapter가 나뉘는 방식이 제각각인 문제
 
-### 3-2. 책마다 다른 chapter 구조를 reader와 AI의 공통 단위로 만드는 문제
+처음에는 EPUB의 spine 항목 하나를 chapter 하나로 봤습니다. 하지만 하나의 XHTML에 여러 장이 들어 있는 책은 내용이 지나치게 크게 묶였고, 반대로 목차 항목을 그대로 나누면 전집이나 희곡이 수백 개의 작은 chapter로 쪼개졌습니다.
 
-`spine item 1개 = chapter 1개` 방식은 하나의 XHTML에 여러 장이 들어 있는 책을 과도하게 합쳤습니다. 반대로 TOC leaf를 그대로 chapter로 사용하면 전집, 희곡과 장시에서 수백 개 단위로 잘게 쪼개졌습니다.
+정규화 규칙 v2에서는 목차의 fragment를 이용해 먼저 실제 경계를 찾고, 그 결과를 reader와 AI가 함께 사용할 canonical chapter로 다시 합쳤습니다. `nav`를 우선 사용하고 없으면 `ncx`, 그것도 없으면 heading을 기준으로 찾습니다. 목차·색인·라이선스 페이지는 제외하고, 너무 짧은 단위는 주변 내용과 합쳤습니다.
 
-정규화 규칙 v2에서는 먼저 TOC fragment로 정확한 경계를 찾은 뒤, reader와 AI가 함께 사용할 canonical chapter로 재병합했습니다.
+이 서비스에서는 원작의 목차를 그대로 복제하는 것보다 reader와 AI가 같은 분석 단위를 쓰는 것이 더 중요했습니다. 그래서 AI 처리량도 고려해 한 권을 최대 20개의 canonical chapter로 정리했습니다. 규칙 버전도 함께 저장해, 정규화 방식이 바뀌면 과거 결과를 다시 처리해야 하는지 알 수 있게 했습니다. [관련 PR #104](https://github.com/Read-With/BE/pull/104)
 
-```text
-nav 우선 / ncx fallback / heading heuristic fallback
- -> TOC fragment split
- -> frontmatter·contents·license·index 제외
- -> 짧은 unit 및 scene 병합
- -> canonical chapter 생성
-```
+### 3-3. reader 본문과 AI 분석 파일의 공개 범위를 나눈 이유
 
-원작 목차를 그대로 복제하기보다 reader 표시와 AI 분석이 동일한 단위를 공유하도록 했고, 분석 처리량을 고려해 canonical chapter를 최대 20개로 병합하는 정책을 적용했습니다. `ruleVersion`을 저장해 규칙 변경 이후 기존 산출물을 `OUTDATED`로 식별할 수 있습니다.
+reader가 사용하는 본문은 빠르게 열려야 하지만, AI 분석에 쓰는 중간 파일까지 모두 공개할 필요는 없습니다. 그래서 `combined.xhtml`은 CloudFront로 제공하고, `meta.json`과 chapter별 TXT는 필요한 시간 동안만 유효한 presigned URL로 전달했습니다.
 
-- 관련 PR: [#104 EPUB 정규화 규칙 v2](https://github.com/Read-With/BE/pull/104)
+DB에는 배포 도메인이 들어간 전체 주소 대신 파일의 기준 경로만 저장했습니다. 정규화가 끝나면 본문은 먼저 읽을 수 있게 하고, 관계 분석이 끝나기 전에는 그래프와 요약만 비워서 반환했습니다. 책 읽기와 AI 분석의 완료 시점을 분리해 한쪽이 다른 쪽을 불필요하게 막지 않도록 한 것입니다.
 
-### 3-3. reader와 AI 분석 서버가 서로 다른 자산 접근 방식을 요구하는 문제
+### 3-4. 관계 그래프 전체를 매번 저장하던 문제
 
-reader는 본문을 빠르게 열 수 있어야 하지만, AI 분석용 중간 산출물을 모두 공개할 필요는 없습니다. 같은 S3 안에서도 소비 주체와 데이터 성격에 따라 접근 경계를 분리했습니다.
+인물 관계는 사건이 일어날 때마다 조금씩 바뀝니다. 매번 전체 그래프를 저장하면 이미 있던 인물과 관계가 계속 반복되고, 어떤 사건 때문에 관계가 달라졌는지도 찾기 어려웠습니다.
 
-- `combined.xhtml`: public prefix에 저장하고 CloudFront URL로 제공
-- `meta.json`, `chapter_*.txt`: private prefix에 저장하고 presigned URL로 제공
-- DB에는 배포 도메인이 포함된 절대 URL 대신 artifact root와 key 저장
-- 정규화가 완료되면 본문 읽기를 허용하고, 분석 전에는 그래프·요약 응답을 분리
+그래서 전체 결과 대신 이벤트마다 달라진 관계만 `relationship-delta-v1` 형식으로 저장했습니다. 조회할 때는 사용자의 독서 위치까지 이벤트를 순서대로 합쳐 현재 그래프를 만듭니다. 같은 이벤트의 분석 결과를 다시 올리면 이전 내용을 교체하고, 같은 이벤트와 인물 방향을 가진 관계가 두 번 저장되지 않도록 DB에도 unique constraint를 추가했습니다.
 
-이 구조로 reader 제공 경로와 AI ingestion 계약을 독립적으로 변경할 수 있게 했습니다.
+[Delta 업로드와 조회 #123](https://github.com/Read-With/BE/pull/123) · [관계 중복 방지 #136](https://github.com/Read-With/BE/pull/136)
 
-### 3-4. 관계 그래프 전체를 반복 저장하던 구조를 Delta로 전환
+### 3-5. 큰 분석 파일을 올릴 때 서버 메모리가 부족해지는 문제
 
-인물 관계는 독서 진행에 따라 계속 변합니다. 매 이벤트마다 전체 그래프 스냅샷을 저장하면 같은 노드와 간선이 반복되고, 어떤 사건에서 관계가 바뀌었는지 추적하기 어렵습니다.
+관계 분석 파일을 요청 안에서 한꺼번에 읽고 저장하면 메모리 사용량이 커지고, 같은 시간에 실행되는 EPUB 정규화에도 영향을 줬습니다. 업로드 파일을 먼저 S3의 비공개 경로에 저장하고 `202 Accepted`를 반환한 뒤, 서버가 파일을 하나씩 읽어 처리하도록 바꿨습니다.
 
-`relationship-delta-v1` 계약을 정의해 이벤트별 변화만 저장하고, 조회 시 이벤트 순서대로 fold하여 현재 그래프를 복원하도록 변경했습니다.
+작업 상태와 로그는 기존 정규화 작업과 같은 테이블에 기록했습니다. 같은 책의 분석이 이미 실행 중이면 새 작업을 막고, 모든 파일 처리가 끝났을 때만 책의 분석 완료 상태를 바꿨습니다. 실패한 입력 파일은 원인을 확인하고 다시 처리할 수 있도록 바로 지우지 않았습니다. [관련 PR #138](https://github.com/Read-With/BE/pull/138)
 
-- raw relationship delta와 누적 graph 조회 경로 분리
-- 이벤트 순서에 따라 `evidenceCount`, `positivity`, `labels`, `latestReason`, `directionCounts` 누적
-- 동일 이벤트의 재업로드는 기존 Delta를 교체해 결과를 멱등하게 유지
-- `(event_id, from_char_id, to_char_id)` unique constraint로 같은 방향의 edge 중복 저장 차단
+### 3-6. EPUB 업로드 중 S3를 기다리며 DB 커넥션을 점유한 문제
 
-- 관련 PR: [#123 relationship delta 업로드·조회](https://github.com/Read-With/BE/pull/123), [#136 relationship edge 중복 저장 방지](https://github.com/Read-With/BE/pull/136)
+EPUB 원본과 표지를 S3에 올리는 동안 DB 트랜잭션도 계속 열린 채로 남아 있었습니다. 업로드가 겹치면 적은 커넥션을 오래 차지해 다른 요청까지 느려질 수 있었습니다.
 
-### 3-5. 큰 관계 분석 파일을 제한된 메모리에서 안정적으로 적재하는 문제
+파일 업로드는 트랜잭션 밖에서 수행하고, 책 정보 저장과 정규화 작업 등록처럼 DB가 필요한 부분만 짧게 나눴습니다. 원본 업로드나 DB 반영이 실패하면 정규화 작업을 시작하지 않고 책 상태를 `FAILED`로 남깁니다. 표지 업로드 실패는 책 본문 처리까지 막을 필요가 없다고 판단해 표지 없이 계속 진행하도록 범위를 나눴습니다. [관련 PR #144](https://github.com/Read-With/BE/pull/144)
 
-대용량 multipart 요청을 한 번에 메모리에 올리고 동기 처리하면 제한된 서버 자원에서 다른 요청과 정규화 작업까지 영향을 받습니다. 관계 Delta 적재를 비동기 job으로 분리했습니다.
+### 3-7. 캐릭터마다 그림체가 달라지고 재생성 비용이 커지는 문제
 
-- 요청 파일을 private S3 staging prefix에 저장하고 `202 Accepted` 반환
-- S3 파일을 하나씩 stream 파싱해 replace 저장
-- 같은 책의 활성 분석 job 중복 실행 차단
-- `processing_job`, `processing_job_log`를 정규화와 관계 적재에서 공통 사용
-- 완료 시점에만 책의 분석 상태 갱신
-- 실패 분석과 재처리를 위해 입력 artifact와 처리 로그 보존
+처음에는 등장인물을 등록하면 모든 이미지를 바로 생성했습니다. 대표 이미지의 스타일이 마음에 들지 않으면 나머지 이미지도 모두 다시 만들어야 했고, 한 책 안에서도 그림체가 달라지는 문제가 있었습니다.
 
-- 관련 PR: [#138 relationship delta 업로드 job화](https://github.com/Read-With/BE/pull/138)
+이후에는 대표 후보를 먼저 만들고 관리자가 하나를 고른 뒤, 선택한 이미지를 기준으로 나머지 캐릭터를 생성하도록 바꿨습니다. 오래 걸리는 생성은 비동기 작업으로 처리하며 서버가 재시작돼도 진행 중인 작업을 다시 확인합니다. OpenAI Batch 자체는 성공했지만 S3와 DB에 게시하는 단계에서 실패한 경우에는 이미 과금된 결과를 다시 사용해 게시 단계만 재시도할 수 있게 했습니다.
 
-### 3-6. 외부 파일 I/O가 EPUB 업로드 트랜잭션을 오래 점유하는 문제
+[Batch 이미지 생성 #150](https://github.com/Read-With/BE/pull/150) · [결과 재게시 #152](https://github.com/Read-With/BE/pull/152) · [대표 후보 비동기 생성 #154](https://github.com/Read-With/BE/pull/154)
 
-EPUB source와 표지 S3 업로드가 DB 트랜잭션 안에 포함되면 동시 업로드 시 커넥션을 오래 점유합니다. 업로드 오케스트레이션 전체는 트랜잭션 없이 실행하고, 책 생성, artifact 반영, job 생성과 실패 상태 반영만 짧은 트랜잭션으로 분리했습니다.
+## 4. 제한된 서버 자원에서 운영하기
 
-source staging이나 DB 확정이 실패하면 정규화 job을 dispatch하지 않고 책을 `FAILED`로 남기는 보상 흐름도 추가했습니다. 표지 업로드 실패는 본문 처리 전체를 실패시키지 않고 표지 없이 계속 진행하도록 실패 범위를 구분했습니다.
+Render 무료 환경의 512MB 메모리에서 서버가 `status 137`로 종료되는 문제가 있었습니다. 단순히 heap 하나만 줄이지 않고, 동시에 실행되는 작업과 DB 커넥션까지 함께 조정했습니다.
 
-- 관련 PR: [#144 EPUB 업로드 트랜잭션 범위 축소](https://github.com/Read-With/BE/pull/144)
-
-### 3-7. AI 이미지 생성의 비용과 일관성을 관리자 승인형 파이프라인으로 제어
-
-인물 업로드 직후 모든 캐릭터 이미지를 자동 생성하면 스타일 편차를 뒤늦게 발견하고 전체 이미지를 다시 생성해야 합니다. 대표 이미지 후보를 먼저 만들고 관리자가 선택한 reference image를 기준으로 나머지 캐릭터를 fan-out하는 구조로 바꿨습니다.
-
-- 대표 후보 생성과 선택을 비동기 processing job으로 관리
-- 선택한 reference와 series-lock prompt를 모든 캐릭터 생성에 공통 적용
-- OpenAI Batch를 이용해 fan-out하고 서버 재시작 후에도 제출·조회 재개
-- slot별 독립 처리와 부분 성공 판정
-- Batch는 성공했지만 게시가 실패한 경우 기존 output을 재사용해 S3·DB 게시만 재시도
-- 새 이미지 URL의 DB commit 이후 교체된 S3 객체 삭제
-
-- 관련 PR: [#150 GPT Image Batch fan-out](https://github.com/Read-With/BE/pull/150), [#152 Batch 결과 재게시](https://github.com/Read-With/BE/pull/152), [#154 대표 후보 생성 비동기화](https://github.com/Read-With/BE/pull/154)
-
-## 4. 제한된 런타임 자원 최적화
-
-Render 512MB 환경에서 프로세스가 `status 137`로 종료되는 문제를 기준으로 JVM, DB 커넥션과 작업 동시성을 함께 줄였습니다.
-
-| 영역 | 적용 내용 |
+| 영역 | 현재 설정 |
 | --- | --- |
-| JVM | `Xms64m / Xmx256m`, Serial GC, processor 1, metaspace·direct memory·stack 제한 |
+| JVM | `Xms64m / Xmx256m`, Serial GC, processor 1 |
 | Database | HikariCP `maximum-pool-size: 2`, `minimum-idle: 1` |
-| Async | 이미지 생성과 EPUB 정규화 동시 실행 수 1로 제한 |
-| JPA | `default_batch_fetch_size`를 100으로 축소 |
-| API Docs | 운영 환경에서 Swagger/OpenAPI 기본 비활성화 |
-| Image Upload | 불필요한 base64 재인코딩을 제거하고 byte 배열을 S3에 직접 업로드 |
+| Async | 이미지 생성과 EPUB 정규화를 한 번에 하나씩 실행 |
+| JPA | `default_batch_fetch_size: 100` |
+| API Docs | 운영 환경에서는 Swagger 기본 비활성화 |
 
-- 관련 PR: [#140 Render Free 메모리 초과 종료 대응](https://github.com/Read-With/BE/pull/140)
+이미지 업로드 과정에서 byte 배열을 base64로 바꿨다가 다시 되돌리던 과정도 제거했습니다. 이 설정으로 작은 서버에서 한 번에 많은 일을 처리하려 하기보다, 적은 작업을 끝까지 안정적으로 처리하는 쪽을 선택했습니다. [관련 PR #140](https://github.com/Read-With/BE/pull/140)
 
-## 5. 검증 결과
+## 5. 검증
 
-- 저장소의 Gutenberg EPUB 회귀 표본 12종 `정규화 성공 12 / 실패 0`
-- EPUB 위치에서 분석 위치를 거쳐 다시 원본으로 돌아오는 `round-trip failure 0`
-- canonical chapter 수, `combined.xhtml` section 수와 `meta.json` chapter 수 일치 검증
-- placeholder title 제외와 `startPos/endPos`, 문단 시작점·길이 구조 검증
-- Delta 중복 적재, 이벤트 교체, 순서 기반 fold 결과 테스트
-- processing job 상태 전이, 중복 dispatch, 재개와 부분 성공 테스트
-- 외부 I/O와 DB 반영 순서 및 실패 보상 흐름 테스트
+- Gutenberg EPUB 표본 12종 모두 정규화 성공
+- EPUB 위치를 분석용 위치로 바꾼 뒤 다시 원래 위치로 돌아오는 round-trip 실패 0건
+- `combined.xhtml`의 section 수와 `meta.json`의 chapter 수가 일치하는지 확인
+- 목차·라이선스 같은 placeholder가 본문 chapter에 들어오지 않는지 확인
+- 같은 관계가 중복 저장되지 않고 이벤트 순서대로 그래프가 만들어지는지 테스트
+- 작업 중복 실행, 서버 재시작 후 재개, 부분 성공과 실패 상태 테스트
